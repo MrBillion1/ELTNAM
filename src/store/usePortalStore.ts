@@ -17,7 +17,9 @@ export interface ChatMessage {
 
 export interface ChainStats {
   tvl: string;
+  chainTvl: string;
   tvlChange: string;
+  chainTvlChange: string;
   blockNumber: string;
   gasPrice: string;
   tps: string;
@@ -60,7 +62,9 @@ export const usePortalStore = create<PortalState>((set) => ({
   isChatOpen: false,
   chainStats: {
     tvl: '$4.38B',
+    chainTvl: '$338.5M',
     tvlChange: '+2.4%',
+    chainTvlChange: '+1.5%',
     blockNumber: '68,241,509',
     gasPrice: '0.05 Gwei',
     tps: '12.4',

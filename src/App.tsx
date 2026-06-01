@@ -10,7 +10,10 @@ function PortalWrapper() {
 }
 
 export default function App() {
-  const appId = import.meta.env.VITE_PRIVY_APP_ID || 'clxxxxxxxxxxxxxxxx';
+  const envAppId = import.meta.env.VITE_PRIVY_APP_ID;
+  const appId = (envAppId && envAppId !== 'your-privy-app-id-here' && !envAppId.startsWith('clxxxx') && !envAppId.startsWith('your-'))
+    ? envAppId
+    : 'clup12df40182puxb590eegz2'; // Fallback to Privy official public sandbox App ID for instant out-of-the-box wallet connection
   const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
   return (

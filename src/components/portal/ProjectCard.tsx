@@ -18,6 +18,7 @@ interface ProjectCardProps {
 export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardProps) {
   const { data } = useProtocolData(project);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
 
   const statusStyles = {
     Featured: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400',
@@ -42,12 +43,21 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
       <div className="space-y-4">
         {/* Top bar with icon and tags */}
         <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-4xl filter drop-shadow-md select-none transform transition group-hover:scale-110">
-              {project.icon}
-            </span>
+          <div className="flex items-center gap-3.5">
+            {!imgFailed && project.defillamaSlug ? (
+              <img
+                src={`https://icons.llamao.fi/icons/protocols/${project.defillamaSlug}?h=80&w=80`}
+                alt={project.name}
+                className="w-12 h-12 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 shadow-sm transform transition hover:scale-105"
+                onError={() => setImgFailed(true)}
+              />
+            ) : (
+              <span className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-2xl shadow-inner select-none transform transition hover:scale-105">
+                {project.icon}
+              </span>
+            )}
             <div>
-              <h3 className="text-base font-extrabold tracking-tight text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors">
+              <h3 className="text-base font-extrabold tracking-tight text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors font-serif">
                 {project.name}
               </h3>
               <p className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-secondary)]">

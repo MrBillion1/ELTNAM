@@ -10,7 +10,6 @@ import {
   Moon,
   Copy,
   CheckCircle,
-  Upload,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -240,11 +239,9 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               </button>
             )}
           </div>
-        </header>
-
-        {/* Brand Banner (Imitating Mantle UI from the reference image) */}
-        <div className="p-6 md:p-8">
-          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#b6fdf0] to-[#e4fffa] dark:from-[#04241d] dark:to-[#083a2f] border border-[#00e6b4]/20 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-[#00e6b4]/5">
+        </header>        {/* Brand Banner (Imitating Mantle UI from the reference image) */}
+        <div className="p-6 md:p-8 animate-in">
+          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#b6fdf0] to-[#e4fffa] dark:from-[#04241d] dark:to-[#083a2f] border border-[#00e6b4]/20 p-8 md:p-12 flex flex-col xl:flex-row items-center justify-between gap-8 shadow-xl shadow-[#00e6b4]/5">
             {/* Absolute overlapping vector circles decoration */}
             <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20">
               <div className="absolute -left-10 -top-10 w-48 h-48 rounded-full bg-[#00e6b4]/20 blur-xl" />
@@ -256,39 +253,32 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             </div>
 
             <div className="relative space-y-4 max-w-2xl text-left">
-              <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">
-                Built for Hyperscale with Mantle
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight font-serif">
+                The Agentic Gateway to Mantle
               </h1>
-              <p className="text-sm md:text-base text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-                dApps built on Mantle benefit from low fees, high scalability, and Ethereum-level security. Join us in building on the first modular layer-2 chain on Ethereum.
+              <p className="text-xs md:text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-semibold">
+                ELTNAM is a next-generation portal that enables you to explore and interact with all 242+ Mantle dApps through natural language. Just drop your intent, and watch our agents execute complex multi-step transactions securely on your behalf.
               </p>
-              <button
-                onClick={() => window.open('https://github.com/MrBillion1/ELTNAM', '_blank')}
-                className="inline-flex items-center gap-2 px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-black/20"
-              >
-                <span>Submit Your Project</span>
-                <Upload size={14} />
-              </button>
             </div>
 
             {/* Real-time stats bar integrated directly into the brand banner */}
-            <div className="relative w-full md:w-auto grid grid-cols-2 gap-3 min-w-[280px]">
+            <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 min-w-[280px] xl:max-w-3xl">
               {[
                 { label: 'Ecosystem TVL', value: chainStats.tvl, desc: chainStats.tvlChange, color: 'text-emerald-600 dark:text-emerald-400' },
+                { label: 'TVL', value: chainStats.chainTvl, desc: chainStats.chainTvlChange, color: 'text-cyan-600 dark:text-cyan-400' },
                 { label: 'Latest Block', value: chainStats.blockNumber, desc: 'Mantle Mainnet', color: 'text-blue-600 dark:text-blue-400' },
                 { label: 'Gas Price', value: chainStats.gasPrice, desc: 'Ultra-low cost', color: 'text-[#00b38c] dark:text-[#00e6b4]' },
                 { label: 'Active Users', value: chainStats.activeUsers24h, desc: '24h Transactions', color: 'text-purple-600 dark:text-purple-400' },
               ].map((st, idx) => (
-                <div key={idx} className="p-3.5 rounded-2xl bg-white/70 dark:bg-black/40 border border-[#00e6b4]/10 dark:border-slate-800/80 space-y-0.5">
+                <div key={idx} className="p-3.5 rounded-2xl bg-white/80 dark:bg-black/50 border border-[#00e6b4]/10 dark:border-slate-800/80 space-y-0.5 shadow-sm hover:scale-[1.02] transition duration-200">
                   <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
-                  <p className={`text-base font-extrabold ${st.color}`}>{st.value}</p>
+                  <p className={`text-base font-extrabold tracking-tight ${st.color}`}>{st.value}</p>
                   <p className="text-[8px] text-slate-400 dark:text-slate-500 font-semibold">{st.desc}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
-
         {/* Category Pill Pinned Selector */}
         <div className="px-6 md:px-8">
           <CategoryBar
