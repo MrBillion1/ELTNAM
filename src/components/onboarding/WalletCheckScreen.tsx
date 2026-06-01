@@ -227,13 +227,18 @@ export function WalletCheckScreen({
 
       <button
         onClick={onEnterPortal}
-        disabled={evmWallets.length === 0 || switching}
+        disabled={switching}
         className="w-full py-4 mt-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-bold text-white transition shadow-xl shadow-blue-600/20 flex items-center justify-center gap-2 group"
       >
         {switching ? (
           <>
             <Loader size={18} className="animate-spin" />
             <span>Connecting to Mantle…</span>
+          </>
+        ) : evmWallets.length === 0 ? (
+          <>
+            <span>Explore Portal (Guest Mode)</span>
+            <ArrowRight size={18} className="group-hover:translate-x-1 transition" />
           </>
         ) : isEmpty ? (
           <>
