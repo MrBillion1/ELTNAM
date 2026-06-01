@@ -1,9 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Zap, Trash2, ArrowUpRight, Loader } from 'lucide-react';
+import { Send, Zap, Trash2, ArrowUpRight, Loader, X } from 'lucide-react';
 import { usePortalStore } from '../../store/usePortalStore';
 
-// In dev: API server runs on :3001 (node server.mjs).
-// In production: reverse-proxy routes /api to the same origin.
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 const SUGGESTED_PROMPTS = [
@@ -14,15 +12,15 @@ const SUGGESTED_PROMPTS = [
 ];
 
 export function AgentSidebar() {
-  const { messages, addMessage, updateMessage, clearHistory, wallets } = usePortalStore();
+  const { messages, addMessage, updateMessage, clearHistory, wallets, isChatOpen, setPortalState } = usePortalStore();
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom of conversation
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isChatOpen]);
 
   const handleSend = async (textToSend: string) => {
     if (!textToSend.trim() || isSending) return;
@@ -34,14 +32,12 @@ export function AgentSidebar() {
       text: textToSend,
     });
 
-    // Add thinking agent response
     const agentMsgId = addMessage({
       type: 'agent',
       text: '',
     });
 
     try {
-      // Simulate Claude streaming response via proxy route in future, or client-side fallback
       const userAddress = wallets[0]?.address || 'your Mantle wallet';
       let responseText = '';
       
@@ -51,7 +47,6 @@ export function AgentSidebar() {
         history: messages.map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }))
       };
 
-      // Call server proxy route (Phase 9)
       const res = await fetch(`${API_BASE}/api/agent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,7 +54,6 @@ export function AgentSidebar() {
       }).catch(() => null);
 
       if (res && res.ok) {
-        // Read response stream
         const reader = res.body?.getReader();
         const decoder = new TextDecoder();
         if (reader) {
@@ -67,7 +61,6 @@ export function AgentSidebar() {
             const { done, value } = await reader.read();
             if (done) break;
             const chunk = decoder.decode(value);
-            // Process lines (e.g. Server-Sent Events SSE format "data: ...")
             const lines = chunk.split('\n');
             for (const line of lines) {
               if (line.startsWith('data: ')) {
@@ -77,7 +70,6 @@ export function AgentSidebar() {
                     responseText += dataObj.text;
                     updateMessage(agentMsgId, { text: responseText });
                   } else if (dataObj.toolCall) {
-                    // Update state with tool call cards if any
                     updateMessage(agentMsgId, {
                       toolCall: {
                         name: dataObj.toolCall.name,
@@ -87,7 +79,6 @@ export function AgentSidebar() {
                     });
                   }
                 } catch {
-                  // Fallback string append if not valid JSON
                   responseText += line.slice(6);
                   updateMessage(agentMsgId, { text: responseText });
                 }
@@ -96,7 +87,6 @@ export function AgentSidebar() {
           }
         }
       } else {
-        // Fallback descriptive response if API is mocked or server is not running
         const query = textToSend.toLowerCase();
         let fallbackText = "I'm processing your request on Mantle. Let me check the registry for details…\n\n";
 
@@ -112,13 +102,12 @@ export function AgentSidebar() {
           fallbackText = `I'm your Mantle Ecosystem Agent. I'm connected to your wallet (${userAddress.slice(0,6)}...${userAddress.slice(-4)}) and ready to execute transactions, fetch live DeFi data, analyze X/Discord sentiment, or bridge tokens. Ask me any query!`;
         }
 
-        // Simulating token-by-token typing speed for visual excellence
         let typedText = '';
         const words = fallbackText.split(' ');
         for (let i = 0; i < words.length; i++) {
           typedText += words[i] + ' ';
           updateMessage(agentMsgId, { text: typedText });
-          await new Promise((resolve) => setTimeout(resolve, 30));
+          await new Promise((resolve) => setTimeout(resolve, 35));
         }
       }
     } catch (err) {
@@ -129,51 +118,65 @@ export function AgentSidebar() {
     }
   };
 
+  const handleClose = () => {
+    setPortalState({ isChatOpen: false });
+  };
+
   return (
-    <div className="flex flex-col h-full bg-slate-900/60 border-l border-slate-800/80 w-full animate-in fade-in duration-300">
+    <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[450px] bg-[var(--bg-secondary)] border-l border-[var(--border-primary)] shadow-2xl flex flex-col h-full transform transition-transform duration-300 ${isChatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
       {/* Header */}
-      <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+      <div className="p-5 border-b border-[var(--border-primary)] flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-md flex items-center justify-center">
-            <Zap size={12} className="text-white" />
+          <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-lg flex items-center justify-center shadow-md">
+            <Zap size={14} className="text-white" />
           </div>
-          <h2 className="text-sm font-black text-white uppercase tracking-wider">AI Ecosystem Agent</h2>
+          <div>
+            <h2 className="text-sm font-black text-[var(--text-primary)] uppercase tracking-wider">Ask AI</h2>
+            <p className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">ELTNAM Copilot</p>
+          </div>
         </div>
-        <button
-          onClick={clearHistory}
-          title="Clear History"
-          className="p-1.5 hover:bg-slate-800 rounded-md text-slate-500 hover:text-slate-300 transition"
-        >
-          <Trash2 size={13} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={clearHistory}
+            title="Clear History"
+            className="p-2 hover:bg-[var(--border-primary)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+          <button
+            onClick={handleClose}
+            title="Close Panel"
+            className="p-2 hover:bg-[var(--border-primary)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
-      {/* Messages Window */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">
         {messages.map((msg) => {
           const isUser = msg.type === 'user';
           return (
-            <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in duration-200`}>
+            <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in`}>
               <div
-                className={`max-w-[85%] rounded-xl p-3.5 text-xs leading-relaxed ${
+                className={`max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed ${
                   isUser
-                    ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-tr-none shadow-md shadow-blue-500/10'
-                    : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none shadow-sm'
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-tr-none shadow-md shadow-blue-500/10'
+                    : 'bg-[var(--card-bg)] border border-[var(--border-primary)] text-[var(--text-primary)] rounded-tl-none shadow-sm'
                 }`}
               >
-                {/* Rich content rendering */}
                 <div className="whitespace-pre-line font-medium leading-normal space-y-2">
                   {msg.text || (isSending && msg.id === messages[messages.length - 1].id && (
-                    <span className="flex items-center gap-1 text-slate-500">
-                      <Loader size={10} className="animate-spin text-cyan-400" />
+                    <span className="flex items-center gap-1.5 text-slate-500">
+                      <Loader size={11} className="animate-spin text-cyan-400" />
                       Thinking…
                     </span>
                   ))}
                 </div>
 
-                {/* Tool call cards rendering */}
                 {msg.toolCall && (
-                  <div className="mt-3 p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
+                  <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
                     <div className="flex items-center justify-between text-[10px]">
                       <span className="text-cyan-400 font-bold uppercase tracking-wider">🛠️ {msg.toolCall.name}</span>
                       {msg.toolCall.status === 'running' ? (
@@ -198,14 +201,14 @@ export function AgentSidebar() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggested Prompts on Empty State */}
+      {/* Suggested Prompts */}
       {messages.length === 1 && (
-        <div className="px-4 py-2 grid grid-cols-2 gap-2 animate-in duration-300">
+        <div className="px-5 py-2 grid grid-cols-2 gap-2 animate-in">
           {SUGGESTED_PROMPTS.map((prompt) => (
             <button
               key={prompt}
               onClick={() => handleSend(prompt)}
-              className="p-2.5 text-left border border-slate-800 hover:border-slate-700 bg-slate-950/40 rounded-lg text-[10px] text-slate-400 hover:text-white transition hover:-translate-y-0.5"
+              className="p-3 text-left border border-[var(--border-primary)] hover:border-[var(--accent-color)] bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] rounded-xl text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] theme-transition hover:-translate-y-0.5"
             >
               <span>{prompt}</span>
               <ArrowUpRight size={10} className="inline ml-1 text-slate-500" />
@@ -220,7 +223,7 @@ export function AgentSidebar() {
           e.preventDefault();
           handleSend(input);
         }}
-        className="p-4 border-t border-slate-800/80 bg-slate-950/40"
+        className="p-5 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]"
       >
         <div className="flex gap-2 relative">
           <input
@@ -228,13 +231,13 @@ export function AgentSidebar() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isSending}
-            placeholder="Ask AI Copilot to swap, bridge, get data…"
-            className="flex-1 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition disabled:opacity-50"
+            placeholder="Ask AI to swap, bridge, or query DeFi..."
+            className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] rounded-xl pl-3.5 pr-10 py-3 text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/20 theme-transition disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={!input.trim() || isSending}
-            className="absolute right-1.5 top-1.5 p-1.5 bg-gradient-to-r from-blue-600 to-cyan-500 disabled:from-slate-800 disabled:to-slate-900 rounded-md text-white transition hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-40"
+            className="absolute right-1.5 top-1.5 p-2 bg-gradient-to-r from-blue-600 to-cyan-500 disabled:from-slate-800 disabled:to-slate-900 rounded-lg text-white transition hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-40"
           >
             <Send size={12} />
           </button>

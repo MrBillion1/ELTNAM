@@ -15,6 +15,15 @@ export interface ChatMessage {
   };
 }
 
+export interface ChainStats {
+  tvl: string;
+  tvlChange: string;
+  blockNumber: string;
+  gasPrice: string;
+  tps: string;
+  activeUsers24h: string;
+}
+
 interface PortalState {
   activeInterface: 'discovery' | 'dapp';
   activeCategory: string;
@@ -22,10 +31,15 @@ interface PortalState {
   messages: ChatMessage[];
   wallets: ConnectedWallet[];
   user: User | null;
+  theme: 'light' | 'dark';
+  isChatOpen: boolean;
+  chainStats: ChainStats;
   setPortalState: (state: Partial<PortalState>) => void;
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   clearHistory: () => void;
+  toggleTheme: () => void;
+  toggleChat: () => void;
 }
 
 export const usePortalStore = create<PortalState>((set) => ({
@@ -42,6 +56,16 @@ export const usePortalStore = create<PortalState>((set) => ({
   ],
   wallets: [],
   user: null,
+  theme: 'dark',
+  isChatOpen: false,
+  chainStats: {
+    tvl: '$4.38B',
+    tvlChange: '+2.4%',
+    blockNumber: '68,241,509',
+    gasPrice: '0.05 Gwei',
+    tps: '12.4',
+    activeUsers24h: '48,242',
+  },
 
   setPortalState: (state) => set((prev) => ({ ...prev, ...state })),
 
@@ -73,5 +97,15 @@ export const usePortalStore = create<PortalState>((set) => ({
           timestamp: new Date(),
         },
       ],
+    })),
+
+  toggleTheme: () =>
+    set((state) => ({
+      theme: state.theme === 'light' ? 'dark' : 'light',
+    })),
+
+  toggleChat: () =>
+    set((state) => ({
+      isChatOpen: !state.isChatOpen,
     })),
 }));

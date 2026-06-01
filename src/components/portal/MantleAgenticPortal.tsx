@@ -10,12 +10,22 @@ interface MantleAgenticPortalProps {
 }
 
 export default function MantleAgenticPortal({ wallets, user }: MantleAgenticPortalProps) {
-  const { activeInterface, selectedProject, setPortalState } = usePortalStore();
+  const { activeInterface, selectedProject, setPortalState, theme } = usePortalStore();
 
   // Populate user and wallet details in Zustand on load
   useEffect(() => {
     setPortalState({ wallets, user });
   }, [wallets, user, setPortalState]);
+
+  // Synchronise theme with HTML class list for CSS variable selector
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+    }
+  }, [theme]);
 
   const handleProceedToDApp = (project: any) => {
     setPortalState({
@@ -32,7 +42,7 @@ export default function MantleAgenticPortal({ wallets, user }: MantleAgenticPort
   };
 
   return (
-    <div className="w-full h-screen bg-slate-950 text-white overflow-hidden select-none font-sans">
+    <div className="w-full h-screen overflow-hidden select-none font-sans bg-[var(--bg-gradient)] text-[var(--text-primary)]">
       {activeInterface === 'discovery' ? (
         <DiscoveryInterface onProceedToDApp={handleProceedToDApp} />
       ) : (

@@ -2,26 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Inter font */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+/* Space Grotesk (Sharp headings) & Plus Jakarta Sans (Precise body font) */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  /* Default Dark Mode (Mantle Dark Forest Green / Slate) */
+  --bg-primary: #030d0b;
+  --bg-secondary: #061915;
+  --bg-gradient: radial-gradient(circle at 0% 0%, #031310 0%, #020907 50%, #010403 100%);
+  --card-bg: rgba(6, 25, 21, 0.6);
+  --card-hover-bg: rgba(10, 38, 32, 0.85);
+  --text-primary: #f2f7f5;
+  --text-secondary: #8da49f;
+  --border-primary: rgba(14, 54, 46, 0.6);
+  --border-hover: rgba(0, 230, 180, 0.4);
+  --accent-color: #00e6b4; /* Mantle signature teal */
+  --accent-hover: #00ffc8;
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --header-bg: rgba(3, 13, 11, 0.8);
+}
+
+.light {
+  /* Mantle Light Mode (Light Cyan / Teal gradient) */
+  --bg-primary: #eafbf7;
+  --bg-secondary: #ffffff;
+  --bg-gradient: linear-gradient(135deg, #cbfdf2 0%, #dffef7 50%, #f3fffc 100%);
+  --card-bg: rgba(255, 255, 255, 0.7);
+  --card-hover-bg: rgba(255, 255, 255, 0.95);
+  --text-primary: #0a241f;
+  --text-secondary: #4a6660;
+  --border-primary: rgba(0, 230, 180, 0.2);
+  --border-hover: rgba(0, 230, 180, 0.6);
+  --accent-color: #00b38c; /* Slightly darker teal for contrast */
+  --accent-hover: #00e6b4;
+  --shadow-color: rgba(0, 73, 58, 0.08);
+  --header-bg: rgba(203, 253, 242, 0.8);
+}
 
 @layer base {
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+    @apply tracking-tight font-bold;
+  }
+
   body {
-    @apply bg-slate-950 text-white;
+    background: var(--bg-gradient);
+    color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background 0.3s ease, color 0.3s ease;
   }
 }
 
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  
   .animate-in { animation: fadeIn 0.3s ease-out; }
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .theme-transition {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
   }
 }

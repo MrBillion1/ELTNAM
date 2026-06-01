@@ -1,7 +1,13 @@
 import { useState } from 'react';
-import { ChevronRight, ArrowUpRight } from 'lucide-react';
+import { Globe, MessageSquare, ChevronRight, ArrowUpRight } from 'lucide-react';
 import type { Project } from '../../lib/mantleProjects';
 import { useProtocolData } from '../onboarding/hooks/useProtocolData';
+
+const TwitterIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
 
 interface ProjectCardProps {
   project: Project;
@@ -14,79 +20,119 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
   const [isExpanded, setIsExpanded] = useState(false);
 
   const statusStyles = {
-    Featured: 'bg-blue-500/20 border-blue-500/40 text-blue-300',
-    EcoFund: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
-    Active: 'bg-slate-800/60 border-slate-700/60 text-slate-400',
+    Featured: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400',
+    EcoFund: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-600 dark:text-cyan-400',
+    Active: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
   }[project.status];
+
+  const handleSocialClick = (e: React.MouseEvent, url: string) => {
+    e.stopPropagation();
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div
       onClick={() => setIsExpanded(!isExpanded)}
-      className={`rounded-xl border transition-all duration-200 cursor-pointer overflow-hidden p-6 bg-slate-900/80 backdrop-blur-xl group hover:scale-[1.02] ${
+      className={`rounded-2xl border theme-transition duration-300 cursor-pointer overflow-hidden p-6 bg-[var(--card-bg)] hover:bg-[var(--card-hover-bg)] shadow-md hover:shadow-xl shadow-[var(--shadow-color)] hover:scale-[1.01] ${
         isExpanded
-          ? 'border-blue-500/60 shadow-lg shadow-blue-500/10'
-          : 'border-slate-800/80 hover:border-slate-700'
+          ? 'border-[var(--accent-color)] ring-1 ring-[var(--accent-color)]/20'
+          : 'border-[var(--border-primary)] hover:border-[var(--border-hover)]'
       }`}
     >
       <div className="space-y-4">
-        {/* Top bar */}
+        {/* Top bar with icon and tags */}
         <div className="flex items-start justify-between">
-          <span className="text-4xl filter drop-shadow-md select-none">{project.icon}</span>
-          <div className="flex gap-2">
-            <span className={`text-[10px] px-2.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${statusStyles}`}>
-              {project.status}
+          <div className="flex items-center gap-3">
+            <span className="text-4xl filter drop-shadow-md select-none transform transition group-hover:scale-110">
+              {project.icon}
             </span>
-            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-800/60 border border-slate-700/60 text-slate-400 uppercase tracking-wider font-semibold">
-              {project.category}
-            </span>
+            <div>
+              <h3 className="text-base font-extrabold tracking-tight text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors">
+                {project.name}
+              </h3>
+              <p className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-secondary)]">
+                {project.category}
+              </p>
+            </div>
           </div>
+          <span className={`text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider ${statusStyles}`}>
+            {project.status}
+          </span>
         </div>
 
-        {/* Title & Desc */}
-        <div>
-          <h3 className="text-lg font-bold text-white group-hover:text-cyan-400 transition-colors">
-            {project.name}
-          </h3>
-          <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
-            {project.description}
-          </p>
-        </div>
+        {/* Description */}
+        <p className="text-xs text-[var(--text-secondary)] leading-relaxed line-clamp-2">
+          {project.description}
+        </p>
 
-        {/* Stats Row */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-800/60">
+        {/* Stats Section */}
+        <div className="grid grid-cols-2 gap-4 py-3 border-t border-[var(--border-primary)]">
           <div>
-            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">TVL</p>
-            <p className="text-sm font-bold text-emerald-400">{data.tvl}</p>
+            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">TVL</p>
+            <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">{data.tvl}</p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">24h Fees</p>
-            <p className="text-sm font-bold text-slate-300">{data.fees24h}</p>
+            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>
+            <p className="text-sm font-extrabold text-[var(--text-primary)]">{data.fees24h}</p>
           </div>
         </div>
 
-        {/* Live source indicator */}
-        <div className="flex items-center justify-between text-[9px] text-slate-600">
+        {/* Footer: Social details and quick view */}
+        <div className="flex items-center justify-between pt-2 border-t border-[var(--border-primary)]/40 text-[10px] text-[var(--text-secondary)]">
+          {/* Social Icons directly on card */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => handleSocialClick(e, project.url)}
+              className="p-1.5 hover:bg-[var(--border-primary)] rounded-lg transition-colors hover:text-[var(--accent-color)]"
+              title="Website"
+            >
+              <Globe size={13} />
+            </button>
+            {project.twitterHandle && (
+              <button
+                onClick={(e) => handleSocialClick(e, `https://x.com/${project.twitterHandle}`)}
+                className="p-1.5 hover:bg-[var(--border-primary)] rounded-lg transition-colors hover:text-[var(--accent-color)]"
+                title="Twitter"
+              >
+                <TwitterIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {project.discordInvite && (
+              <button
+                onClick={(e) => handleSocialClick(e, `https://discord.gg/${project.discordInvite}`)}
+                className="p-1.5 hover:bg-[var(--border-primary)] rounded-lg transition-colors hover:text-[var(--accent-color)]"
+                title="Discord"
+              >
+                <MessageSquare size={13} />
+              </button>
+            )}
+          </div>
+
           <div className="flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${data.isStale ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
-            <span>Source: <strong className="text-slate-500">{data.dataSource}</strong></span>
+            <span className="font-semibold text-[9px] capitalize text-[var(--text-secondary)]/80">
+              {data.dataSource}
+            </span>
           </div>
-          {data.isStale && <span className="text-amber-500/60">Baseline Data</span>}
         </div>
 
-        {/* Expanded Actions & CTA */}
+        {/* Expanded actions list */}
         {isExpanded && (
-          <div className="pt-4 border-t border-slate-800/60 space-y-4 animate-in fade-in duration-300" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="pt-4 border-t border-[var(--border-primary)] space-y-4 animate-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="space-y-1.5">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Quick Actions</p>
+              <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Quick Actions</p>
               <div className="grid grid-cols-2 gap-2">
                 {project.actions.map((act) => (
                   <button
                     key={act}
                     onClick={() => onSelect(project)}
-                    className="p-2 text-left bg-slate-950/60 hover:bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs rounded-lg transition-all duration-200 hover:-translate-y-0.5 text-slate-300 font-medium truncate flex items-center justify-between"
+                    className="p-2.5 text-left bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] border border-[var(--border-primary)] hover:border-[var(--accent-color)] text-xs rounded-xl theme-transition hover:-translate-y-0.5 text-[var(--text-primary)] font-bold truncate flex items-center justify-between"
                   >
                     <span>{act}</span>
-                    <ChevronRight size={10} className="text-slate-500" />
+                    <ChevronRight size={11} className="text-[var(--text-secondary)]" />
                   </button>
                 ))}
               </div>
@@ -94,9 +140,9 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
 
             <button
               onClick={() => onProceedToDApp(project)}
-              className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 shadow-lg shadow-blue-500/10 group/btn"
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 shadow-lg shadow-blue-500/10 group/btn"
             >
-              <span>Use Protocol</span>
+              <span>Launch Embedded dApp</span>
               <ArrowUpRight size={14} className="group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition" />
             </button>
           </div>
