@@ -240,8 +240,8 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             )}
           </div>
         </header>        {/* Brand Banner (Imitating Mantle UI from the reference image) */}
-        <div className="p-6 md:p-8 animate-in">
-          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#b6fdf0] to-[#e4fffa] dark:from-[#04241d] dark:to-[#083a2f] border border-[#00e6b4]/20 p-8 md:p-12 flex flex-col xl:flex-row items-center justify-between gap-8 shadow-xl shadow-[#00e6b4]/5">
+        <div className="p-4 md:p-6 animate-in">
+          <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#b6fdf0] to-[#e4fffa] dark:from-[#04241d] dark:to-[#083a2f] border border-[#00e6b4]/20 p-5 md:p-8 flex flex-col xl:flex-row items-center justify-between gap-6 shadow-xl shadow-[#00e6b4]/5">
             {/* Absolute overlapping vector circles decoration */}
             <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20">
               <div className="absolute -left-10 -top-10 w-48 h-48 rounded-full bg-[#00e6b4]/20 blur-xl" />
@@ -252,17 +252,17 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               </div>
             </div>
 
-            <div className="relative space-y-4 max-w-2xl text-left">
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight font-serif">
+            <div className="relative space-y-2.5 max-w-2xl text-left">
+              <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight font-serif">
                 The Agentic Gateway to Mantle
               </h1>
-              <p className="text-xs md:text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-semibold">
+              <p className="text-[11px] md:text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-semibold">
                 ELTNAM is a next-generation portal that enables you to explore and interact with all 242+ Mantle dApps through natural language. Just drop your intent, and watch our agents execute complex multi-step transactions securely on your behalf.
               </p>
             </div>
 
             {/* Real-time stats bar integrated directly into the brand banner */}
-            <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 min-w-[280px] xl:max-w-3xl">
+            <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 min-w-[280px] xl:max-w-3xl">
               {[
                 { label: 'Ecosystem TVL', value: chainStats.tvl, desc: chainStats.tvlChange, color: 'text-emerald-600 dark:text-emerald-400' },
                 { label: 'TVL', value: chainStats.chainTvl, desc: chainStats.chainTvlChange, color: 'text-cyan-600 dark:text-cyan-400' },
@@ -270,9 +270,9 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
                 { label: 'Gas Price', value: chainStats.gasPrice, desc: 'Ultra-low cost', color: 'text-[#00b38c] dark:text-[#00e6b4]' },
                 { label: 'Active Users', value: chainStats.activeUsers24h, desc: '24h Transactions', color: 'text-purple-600 dark:text-purple-400' },
               ].map((st, idx) => (
-                <div key={idx} className="p-3.5 rounded-2xl bg-white/80 dark:bg-black/50 border border-[#00e6b4]/10 dark:border-slate-800/80 space-y-0.5 shadow-sm hover:scale-[1.02] transition duration-200">
-                  <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
-                  <p className={`text-base font-extrabold tracking-tight ${st.color}`}>{st.value}</p>
+                <div key={idx} className="p-2.5 rounded-xl bg-white/80 dark:bg-black/50 border border-[#00e6b4]/10 dark:border-slate-800/80 space-y-0.5 shadow-sm hover:scale-[1.02] transition duration-200">
+                  <p className="text-[8px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
+                  <p className={`text-sm font-extrabold tracking-tight ${st.color}`}>{st.value}</p>
                   <p className="text-[8px] text-slate-400 dark:text-slate-500 font-semibold">{st.desc}</p>
                 </div>
               ))}
@@ -301,15 +301,15 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               ))}
             </div>
           ) : (
-            <div className="py-20 text-center space-y-2">
-              <p className="text-base font-bold text-[var(--text-primary)]">No projects found</p>
-              <p className="text-xs text-[var(--text-secondary)]">Try adjusting your search query or choosing another category.</p>
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+              <span className="text-4xl">🔍</span>
+              <p className="text-sm text-[var(--text-secondary)] font-bold">No dApps found matching your query</p>
             </div>
           )}
 
-          {/* Centered Pagination (Like Arclenz) */}
+          {/* Simple Premium Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-1.5 mt-10 pb-10">
+            <div className="flex items-center justify-center gap-1.5 mt-8 border-t border-[var(--border-primary)] pt-6">
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
@@ -322,10 +322,10 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
                 <button
                   key={p}
                   onClick={() => handlePageChange(p)}
-                  className={`w-9 h-9 rounded-xl text-xs font-bold transition-all border ${
+                  className={`w-8 h-8 rounded-xl text-xs font-extrabold transition-all border ${
                     currentPage === p
-                      ? 'bg-[var(--accent-color)] border-[var(--accent-color)] text-slate-950 shadow-md shadow-[var(--accent-color)]/25'
-                      : 'border-[var(--border-primary)] hover:border-[var(--border-hover)] bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-gradient-to-r from-blue-600 to-cyan-500 border-cyan-400/30 text-white shadow-md shadow-blue-500/10'
+                      : 'bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   {p}
@@ -345,7 +345,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
       </div>
 
       {/* Floating Ask AI slide-over chat drawer */}
-      <AgentSidebar />
+      <AgentSidebar onLaunchDApp={onProceedToDApp} />
 
       {/* Slide-Up Detail Panel overlay */}
       {selectedProject && (
