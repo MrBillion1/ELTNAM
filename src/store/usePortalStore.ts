@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { type ConnectedWallet, type User } from '@privy-io/react-auth';
 import type { Project } from '../lib/mantleProjects';
+import { type LanguageKey } from '../lib/translations';
 
 export interface ChatMessage {
   id: string;
@@ -35,19 +36,23 @@ interface PortalState {
   user: User | null;
   theme: 'light' | 'dark';
   isChatOpen: boolean;
+  language: LanguageKey;
   chainStats: ChainStats;
+  userBalance: string;
   setPortalState: (state: Partial<PortalState>) => void;
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   clearHistory: () => void;
   toggleTheme: () => void;
   toggleChat: () => void;
+  setLanguage: (lang: LanguageKey) => void;
 }
 
 export const usePortalStore = create<PortalState>((set) => ({
   activeInterface: 'discovery',
   activeCategory: 'all',
   selectedProject: null,
+  language: 'en',
   messages: [
     {
       id: 'initial',
@@ -60,6 +65,7 @@ export const usePortalStore = create<PortalState>((set) => ({
   user: null,
   theme: 'dark',
   isChatOpen: false,
+  userBalance: '0.00',
   chainStats: {
     tvl: '$4.38B',
     chainTvl: '$338.5M',
@@ -111,5 +117,10 @@ export const usePortalStore = create<PortalState>((set) => ({
   toggleChat: () =>
     set((state) => ({
       isChatOpen: !state.isChatOpen,
+    })),
+
+  setLanguage: (lang) =>
+    set(() => ({
+      language: lang,
     })),
 }));

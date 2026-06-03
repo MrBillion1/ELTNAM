@@ -42,7 +42,7 @@ export default function MantleAgenticPortal({ wallets, user }: MantleAgenticPort
   };
 
   return (
-    <div className="w-full h-screen overflow-hidden select-none font-sans bg-[var(--bg-gradient)] text-[var(--text-primary)]">
+    <div className="w-full h-screen overflow-hidden font-sans bg-[var(--bg-gradient)] text-[var(--text-primary)]">
       {activeInterface === 'discovery' ? (
         <DiscoveryInterface onProceedToDApp={handleProceedToDApp} />
       ) : (

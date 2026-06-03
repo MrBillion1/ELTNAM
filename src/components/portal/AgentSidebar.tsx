@@ -18,10 +18,11 @@ interface AgentSidebarProps {
 }
 
 export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
-  const { messages, addMessage, updateMessage, clearHistory, wallets, isChatOpen, setPortalState, selectedProject } = usePortalStore();
+  const { messages, addMessage, updateMessage, clearHistory, wallets, isChatOpen, setPortalState, selectedProject, activeInterface } = usePortalStore();
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showProjectSearch, setShowProjectSearch] = useState(false);
+  const [isAlphabetSearchOpen, setIsAlphabetSearchOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -89,6 +90,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
       const payload = {
         message: textToSend,
         address: userAddress,
+        balance: usePortalStore.getState().userBalance || '0.00',
         context: projectContext,
         history: messages.map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }))
       };
@@ -143,7 +145,10 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
           p.tags.some((t) => query.includes(t.toLowerCase()))
         );
 
-        if (matchedProject) {
+        if (query.includes('balance') || query.includes('how much mnt') || query.includes('my account balance')) {
+          const bal = usePortalStore.getState().userBalance || '0.00';
+          fallbackText = `Your current account balance on Mantle Mainnet is **${bal} MNT**.\n\nConnected Wallet: \`${userAddress}\`\n\nWould you like me to help you bridge more funds, swap tokens, or explore yield opportunities?`;
+        } else if (matchedProject) {
           fallbackText = `Here's what I know about **${matchedProject.name}**:\n\n` +
             `📌 **Category**: ${matchedProject.category}\n` +
             `💰 **TVL**: ${matchedProject.tvl}\n` +
@@ -191,10 +196,8 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
     setPortalState({ isChatOpen: false });
   };
 
-  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-
   return (
-    <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[450px] bg-[var(--bg-secondary)] border-l border-[var(--border-primary)] shadow-2xl flex flex-col h-full transform transition-transform duration-300 ${isChatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+    <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[450px] bg-[var(--bg-secondary)] border-l border-[var(--border-primary)] shadow-2xl flex flex-col h-full transform transition-all duration-300 ${isChatOpen ? 'translate-x-0 opacity-100 visible' : 'translate-x-full opacity-0 invisible pointer-events-none'}`}>
       {/* Header */}
       <div className="p-5 border-b border-[var(--border-primary)] flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -207,6 +210,17 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {activeInterface === 'dapp' && (
+            <button
+              onClick={() => {
+                setPortalState({ activeInterface: 'discovery', selectedProject: null });
+              }}
+              title="Return to Discovery"
+              className="mr-1.5 px-2.5 py-1 text-[10px] font-black rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-[var(--text-secondary)] hover:bg-[var(--card-hover-bg)] transition flex items-center gap-1 uppercase tracking-wider"
+            >
+              <span>← Return</span>
+            </button>
+          )}
           <button
             onClick={clearHistory}
             title="Clear History"
@@ -226,36 +240,50 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
 
       {/* A–Z Quick Filter Pills (shown when messages are at start) */}
       {messages.length <= 1 && (
-        <div className="px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]/40">
-          <p className="text-[8px] text-[var(--text-secondary)] font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
-            <Search size={8} />
-            Type a letter to browse dApps A–Z
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {ALPHABET.map((letter) => {
-              const hasProjects = MANTLE_PROJECTS.some((p) =>
-                p.name.toUpperCase().startsWith(letter)
-              );
-              return (
-                <button
-                  key={letter}
-                  onClick={() => {
-                    if (!hasProjects) return;
-                    setInput(letter.toLowerCase());
-                    inputRef.current?.focus();
-                  }}
-                  disabled={!hasProjects}
-                  className={`w-6 h-6 rounded-md text-[9px] font-extrabold transition-all ${
-                    hasProjects
-                      ? 'bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-[var(--text-secondary)] hover:bg-[var(--card-hover-bg)]'
-                      : 'opacity-20 text-[var(--text-secondary)] cursor-not-allowed'
-                  }`}
-                >
-                  {letter}
-                </button>
-              );
-            })}
+        <div className="px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]/40 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">
+            <Search size={10} />
+            <span>Search dApps A–Z</span>
           </div>
+
+          {!isAlphabetSearchOpen ? (
+            <button
+              onClick={() => setIsAlphabetSearchOpen(true)}
+              className="flex items-center gap-1 px-3 py-1 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-[10px] font-black uppercase tracking-wider transition-all"
+            >
+              🔤 A-Z Filter
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
+              <span className="text-[9px] text-[var(--text-secondary)] font-bold uppercase">Enter Letter:</span>
+              <input
+                type="text"
+                maxLength={1}
+                placeholder="A-Z"
+                className="w-10 h-7 text-center bg-[var(--bg-primary)] border border-[var(--accent-color)] rounded-lg text-xs font-black uppercase text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-color)]/20"
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase();
+                  if (/^[a-z]$/.test(val)) {
+                    setInput(val);
+                    inputRef.current?.focus();
+                  } else if (val === '') {
+                    setInput('');
+                  }
+                }}
+                autoFocus
+              />
+              <button
+                onClick={() => {
+                  setIsAlphabetSearchOpen(false);
+                  setInput('');
+                }}
+                className="p-1 hover:bg-[var(--bg-primary)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                title="Clear filter"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -321,18 +349,14 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
             >
               {/* Logo */}
               <div className="w-9 h-9 flex-shrink-0 rounded-xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-0.5">
-                {project.defillamaSlug ? (
-                  <img
-                    src={`https://icons.llamao.fi/icons/protocols/${project.defillamaSlug}?h=80&w=80`}
-                    alt={project.name}
-                    className="w-full h-full object-contain rounded-lg"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <span className="w-full h-full flex items-center justify-center text-lg">{project.icon}</span>
-                )}
+                <img
+                  src={`https://www.google.com/s2/favicons?sz=128&domain=${project.url.replace('https://', '').replace('http://', '').split('/')[0]}`}
+                  alt={project.name}
+                  className="w-full h-full object-contain rounded-lg"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="%230f172a"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="%2300e6b4" font-size="14" font-weight="bold">${project.name.charAt(0)}</text></svg>`;
+                  }}
+                />
               </div>
 
               {/* Info */}

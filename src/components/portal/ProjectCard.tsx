@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Globe, MessageSquare, ChevronRight, ArrowUpRight } from 'lucide-react';
 import type { Project } from '../../lib/mantleProjects';
 import { useProtocolData } from '../onboarding/hooks/useProtocolData';
+import { usePortalStore } from '../../store/usePortalStore';
+import { TRANSLATIONS } from '../../lib/translations';
 
 const TwitterIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
@@ -17,6 +19,9 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardProps) {
   const { data } = useProtocolData(project);
+  const { language } = usePortalStore();
+  const t = TRANSLATIONS[language];
+  
   const [isExpanded, setIsExpanded] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -31,6 +36,10 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  // Derive domain for favicon
+  const domain = project.url.replace('https://', '').replace('http://', '').split('/')[0];
+  const sharpLogoUrl = `https://www.google.com/s2/favicons?sz=128&domain=${domain}`;
+
   return (
     <div
       onClick={() => setIsExpanded(!isExpanded)}
@@ -44,11 +53,11 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
         {/* Top bar with icon and tags */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3.5">
-            {!imgFailed && project.defillamaSlug ? (
+            {!imgFailed ? (
               <img
-                src={`https://icons.llamao.fi/icons/protocols/${project.defillamaSlug}?h=80&w=80`}
+                src={sharpLogoUrl}
                 alt={project.name}
-                className="w-12 h-12 rounded-xl object-contain bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 shadow-sm transform transition hover:scale-105"
+                className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-200 dark:border-slate-800 p-1.5 shadow-sm transform transition hover:scale-105"
                 onError={() => setImgFailed(true)}
               />
             ) : (
@@ -78,7 +87,7 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
         {/* Stats Section */}
         <div className="grid grid-cols-2 gap-4 py-3 border-t border-[var(--border-primary)]">
           <div>
-            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">TVL</p>
+            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
             <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">{data.tvl}</p>
           </div>
           <div className="text-right">
@@ -133,7 +142,7 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
             onClick={(e) => e.stopPropagation()}
           >
             <div className="space-y-1.5">
-              <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Quick Actions</p>
+              <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.quickActions}</p>
               <div className="grid grid-cols-2 gap-2">
                 {project.actions.map((act) => (
                   <button
@@ -152,7 +161,7 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
               onClick={() => onProceedToDApp(project)}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 shadow-lg shadow-blue-500/10 group/btn"
             >
-              <span>Launch Embedded dApp</span>
+              <span>{t.launchDApp}</span>
               <ArrowUpRight size={14} className="group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition" />
             </button>
           </div>

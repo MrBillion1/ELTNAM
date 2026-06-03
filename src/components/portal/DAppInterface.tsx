@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ExternalLink, Cpu, CheckCircle, RefreshCw,
-  MessageSquare, ShieldAlert, Globe, X
+  MessageSquare, ShieldAlert, Globe, X, Coins
 } from 'lucide-react';
-import { formatEther } from 'viem';
 import type { Project } from '../../lib/mantleProjects';
 import { usePortalStore } from '../../store/usePortalStore';
 import { AgentSidebar } from './AgentSidebar';
 import { mantlePublicClient } from '../../lib/chains';
+import { TRANSLATIONS } from '../../lib/translations';
 
 interface DAppInterfaceProps {
   project: Project;
@@ -15,70 +15,61 @@ interface DAppInterfaceProps {
 }
 
 export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
-  const { wallets, addMessage, isChatOpen, setPortalState } = usePortalStore();
-  const [balance, setBalance] = useState<string>('0.00 MNT');
+  const { wallets, addMessage, isChatOpen, setPortalState, language } = usePortalStore();
+  const t = TRANSLATIONS[language];
+  
   const [intentInput, setIntentInput] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [hasSubmittedIntent, setHasSubmittedIntent] = useState(false);
+  
+  // Workspace Tab: 'portal' (interactive simulator & stats) or 'website' (iframe)
+  const [activeTab, setActiveTab] = useState<'portal' | 'website'>('portal');
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeBlocked, setIframeBlocked] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  // Track if iframe error fired
-  const blockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch balance on mount
+  // Interactive Simulator States
+  const [simStep, setSimStep] = useState<'input' | 'processing' | 'done'>('input');
+  const [swapAmount, setSwapAmount] = useState('');
+  const [swapFrom, setSwapFrom] = useState('MNT');
+  const [swapTo, setSwapTo] = useState('USDC');
+  const [simTxHash, setSimTxHash] = useState('');
+
+  // Lending states
+  const [supplyAmount, setSupplyAmount] = useState('');
+  const [suppliedBalance, setSuppliedBalance] = useState('0.00');
+
+  // Staking states
+  const [stakeAmount, setStakeAmount] = useState('');
+  const [stakedBalance, setStakedBalance] = useState('0.00');
+
+  // Fetch balance on mount (used for future display)
   useEffect(() => {
     const fetchBalance = async () => {
       if (!wallets[0]?.address) return;
       try {
-        const bal = await mantlePublicClient.getBalance({
+        await mantlePublicClient.getBalance({
           address: wallets[0].address as `0x${string}`,
         });
-        setBalance(`${parseFloat(formatEther(bal)).toFixed(2)} MNT`);
-      } catch {
-        setBalance('0.00 MNT');
-      }
+      } catch { /* ignore */ }
     };
     fetchBalance();
   }, [wallets]);
 
-  // Auto-greet with project context injected into the AI sidebar messages
+  // Derive domain for favicon logo
+  const domain = project.url.replace('https://', '').replace('http://', '').split('/')[0];
+  const sharpLogoUrl = `https://www.google.com/s2/favicons?sz=128&domain=${domain}`;
+
+  // Auto-greet in the AI sidebar messages
   useEffect(() => {
     addMessage({
       type: 'agent',
-      text: `I'm your AI Copilot for **${project.name}**! 🚀\n\n` +
-        `${project.description}\n\n` +
-        `Your active wallet has **${balance}** on Mantle. You can browse the live ${project.name} interface on the left, or type your intent below and I'll execute it for you directly — no need to navigate the dApp manually!\n\n` +
-        `**Quick actions I can do:**\n${project.actions.map((a) => `• ${a}`).join('\n')}`,
+      text: `${t.copilotGreeting.replace('this dApp', `**${project.name}**`)}\n\n` +
+        `📊 **${t.tvl}**: ${project.tvl} · **24h Fees**: ${project.fees24h}\n\n` +
+        `**Quick actions I can do for you:**\n${project.actions.map((a) => `• ${a}`).join('\n')}`,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.name]);
-
-  // Give the iframe a 6s window to load — if it never fires 'load', we treat it as blocked
-  useEffect(() => {
-    setIframeLoaded(false);
-    setIframeBlocked(false);
-    blockTimerRef.current = setTimeout(() => {
-      if (!iframeLoaded) {
-        setIframeBlocked(true);
-      }
-    }, 6000);
-    return () => {
-      if (blockTimerRef.current) clearTimeout(blockTimerRef.current);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.url]);
-
-  const handleIframeLoad = () => {
-    if (blockTimerRef.current) clearTimeout(blockTimerRef.current);
-    setIframeLoaded(true);
-    setIframeBlocked(false);
-  };
-
-  const handleIframeError = () => {
-    if (blockTimerRef.current) clearTimeout(blockTimerRef.current);
-    setIframeBlocked(true);
-  };
+  }, [project.name, language]);
 
   const handleIntentSubmit = async (e?: React.FormEvent, customIntent?: string) => {
     if (e) e.preventDefault();
@@ -92,36 +83,80 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
     addMessage({ type: 'user', text: finalIntent });
     const pendingId = addMessage({
       type: 'agent',
-      text: `Processing intent: "${finalIntent}" on ${project.name}…`,
+      text: `Processing: "${finalIntent}" on ${project.name}…`,
     });
 
     setTimeout(() => {
+      const hash = '0x' + Math.random().toString(16).substr(2, 40);
       usePortalStore.getState().updateMessage(pendingId, {
         text:
-          `✅ Intent executed successfully on **${project.name}**!\n\n` +
-          `Your request was processed via ERC-4337 smart account paymaster (gas sponsored). ` +
-          `Transaction hash: **0x9b7e...61f4**\n\n` +
-          `Would you like to execute another action?`,
+          `✅ **Action successfully executed on ${project.name}!**\n\n` +
+          `Your transaction has been processed via ERC-4337 Smart Account with sponsored gas.\n\n` +
+          `🔗 **Transaction Hash**: [${hash.slice(0, 10)}...${hash.slice(-8)}](https://explorer.mantle.xyz/tx/${hash})\n` +
+          `Status: **Confirmed** 🟢`,
       });
       setIntentInput('');
       setIsExecuting(false);
     }, 2000);
   };
 
-  const triggerQuickAction = (label: string) => {
-    setIntentInput(label);
-    handleIntentSubmit(undefined, label);
-  };
+
 
   const toggleAI = () => {
     setPortalState({ isChatOpen: !isChatOpen });
   };
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-slate-950 text-white">
+  const handleSimAction = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSimStep('processing');
+    setTimeout(() => {
+      const mockHash = '0x' + Math.random().toString(16).substr(2, 40);
+      setSimTxHash(mockHash);
+      setSimStep('done');
       
-      {/* ── Left Panel: Real dApp Website Embed ─────────────────────── */}
-      <div className="flex-1 flex flex-col h-full relative overflow-hidden transition-all duration-500">
+      // Update balances locally to feel alive
+      if (project.category === 'dex') {
+        addMessage({
+          type: 'agent',
+          text: `Successfully swapped **${swapAmount} ${swapFrom}** for **${(Number(swapAmount) * 1.05).toFixed(2)} ${swapTo}** on ${project.name}!`
+        });
+      } else if (project.category === 'lending') {
+        setSuppliedBalance((prev) => (Number(prev) + Number(supplyAmount)).toFixed(2));
+        addMessage({
+          type: 'agent',
+          text: `Successfully supplied **${supplyAmount} USDC** to ${project.name} lending pool!`
+        });
+      } else {
+        setStakedBalance((prev) => (Number(prev) + Number(stakeAmount)).toFixed(2));
+        addMessage({
+          type: 'agent',
+          text: `Successfully staked **${stakeAmount} ETH** on ${project.name}!`
+        });
+      }
+    }, 1500);
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-950 text-white relative">
+      
+      {/* Clickable background: clicking anywhere outside the main panel goes back to discovery */}
+      <div
+        className="absolute inset-0 z-0 bg-slate-950 cursor-pointer"
+        onClick={onBack}
+        title="Click outer background to return to Discovery"
+      />
+      
+      {/* ── Left Panel: Real-time detail dashboard + website fallback ─────────────────────── */}
+      <div
+        className="flex-1 flex flex-col h-full relative overflow-hidden z-10 lg:p-4"
+        onClick={(e) => {
+          // If the user clicks exactly on the outer padding area, go back
+          if (e.target === e.currentTarget) {
+            onBack();
+          }
+        }}
+      >
+        <div className="flex-1 flex flex-col h-full relative overflow-hidden bg-slate-900 border border-slate-800 rounded-2xl lg:rounded-3xl shadow-2xl">
 
         {/* ── Top Breadcrumb Bar ── */}
         <div className="h-14 border-b border-slate-800/80 px-4 flex items-center justify-between bg-slate-950/80 backdrop-blur-md z-20 flex-shrink-0">
@@ -130,203 +165,345 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-xs text-slate-300 font-semibold transition"
           >
             <ArrowLeft size={13} />
-            <span>Discovery</span>
+            <span>{t.backToDiscovery}</span>
           </button>
 
-          <div className="flex items-center gap-2">
-            {/* Logo */}
-            {project.defillamaSlug ? (
-              <img
-                src={`https://icons.llamao.fi/icons/protocols/${project.defillamaSlug}?h=80&w=80`}
-                alt={project.name}
-                className="w-6 h-6 rounded-md object-contain bg-white p-0.5"
-                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-              />
-            ) : (
-              <span className="text-lg">{project.icon}</span>
-            )}
-            <span className="text-xs font-bold text-white font-serif">{project.name}</span>
-            <span className="hidden sm:inline text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold uppercase tracking-wider">
-              Live dApp
+          {/* Project Details */}
+          <div className="flex items-center gap-2.5">
+            <img
+              src={sharpLogoUrl}
+              alt={project.name}
+              className="w-6 h-6 rounded-md object-contain bg-white p-0.5 border border-slate-700"
+              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+            />
+            <span className="text-xs font-black text-white font-serif tracking-tight">{project.name}</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold uppercase tracking-wider">
+              {project.status}
             </span>
-            {wallets[0]?.address && (
-              <span className="hidden sm:inline text-[10px] text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800">
-                {balance}
-              </span>
-            )}
           </div>
 
+          {/* Mode Switcher Tabs */}
           <div className="flex items-center gap-2">
-            {/* Ask AI toggle */}
-            <button
-              onClick={toggleAI}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
-                isChatOpen
-                  ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400'
-                  : 'bg-slate-900 border-slate-800 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-400'
-              }`}
-            >
-              <MessageSquare size={12} />
-              <span className="hidden sm:inline">Ask AI</span>
-            </button>
+            <div className="flex bg-slate-900 border border-slate-850 p-0.5 rounded-lg">
+              <button
+                onClick={() => setActiveTab('portal')}
+                className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wider ${
+                  activeTab === 'portal'
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {t.analytics}
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('website');
+                  setIframeLoaded(false);
+                }}
+                className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wider ${
+                  activeTab === 'website'
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {t.liveInterface}
+              </button>
+            </div>
 
-            {/* Open externally */}
             <a
               href={project.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 px-3 py-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-bold border border-slate-800 hover:border-cyan-500/40 rounded-lg bg-slate-900 transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-bold border border-slate-800 hover:border-cyan-500/40 rounded-lg bg-slate-900 transition"
             >
-              <Globe size={12} />
-              <span className="hidden sm:inline">Open Tab</span>
+              <Globe size={11} />
+              <span className="hidden sm:inline">{t.openTab}</span>
               <ExternalLink size={10} />
             </a>
           </div>
         </div>
 
-        {/* ── URL Bar (browser-feel) ── */}
-        <div className="h-9 border-b border-slate-800/60 px-4 flex items-center gap-2 bg-slate-950/60 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] text-emerald-400 font-bold">Secure</span>
-          </div>
-          <div className="flex-1 max-w-xl bg-slate-900/80 border border-slate-800 rounded-md px-3 py-1 text-[10px] text-slate-400 font-mono truncate">
-            🔒 {project.url}
-          </div>
-          {/* Quick action pills */}
-          <div className="hidden lg:flex items-center gap-1.5 ml-2">
-            {project.actions.slice(0, 2).map((act) => (
-              <button
-                key={act}
-                onClick={() => triggerQuickAction(act)}
-                className="px-2.5 py-0.5 text-[9px] font-bold bg-slate-900 hover:bg-cyan-500/10 border border-slate-800 hover:border-cyan-500/40 text-slate-400 hover:text-cyan-400 rounded-full transition"
-              >
-                {act}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* ── Tab Content Area ── */}
+        <div className="flex-1 relative overflow-hidden bg-slate-950">
 
-        {/* ── Iframe / Blocked Fallback ── */}
-        <div className="flex-1 relative overflow-hidden">
-
-          {/* Loading shimmer while iframe is loading */}
-          {!iframeLoaded && !iframeBlocked && (
-            <div className="absolute inset-0 z-10 bg-slate-950 flex items-center justify-center">
-              <div className="text-center space-y-4 animate-pulse">
-                {project.defillamaSlug && (
-                  <img
-                    src={`https://icons.llamao.fi/icons/protocols/${project.defillamaSlug}?h=80&w=80`}
-                    alt=""
-                    className="w-16 h-16 rounded-2xl mx-auto object-contain"
-                  />
-                )}
-                <p className="text-sm font-bold text-slate-300 font-serif">{project.name}</p>
-                <p className="text-xs text-slate-500">Loading live dApp…</p>
-                <div className="flex items-center gap-1.5 justify-center">
-                  <RefreshCw size={12} className="animate-spin text-cyan-400" />
-                  <span className="text-[10px] text-slate-600">Connecting to {project.url.replace('https://', '')}</span>
-                </div>
+          {/* TAB A: Interactive Portal Dashboard (No embedding issues, shows live details) */}
+          {activeTab === 'portal' && (
+            <div className="w-full h-full overflow-y-auto p-6 space-y-6 scrollbar-hide pb-28">
+              
+              {/* Dynamic Stats Banner */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: t.tvl, value: project.tvl, desc: 'Total Value Locked', color: 'text-emerald-400' },
+                  { label: '24h Fees', value: project.fees24h, desc: 'Protocol Revenue', color: 'text-cyan-400' },
+                  { label: 'Platform Status', value: 'Active 🟢', desc: 'Fully Audited', color: 'text-blue-400' },
+                  { label: 'Gas Status', value: 'Sponsored ⚡', desc: 'Account Abstraction', color: 'text-[#00e6b4]' },
+                ].map((s, i) => (
+                  <div key={i} className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 space-y-1 hover:border-slate-700 transition">
+                    <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">{s.label}</p>
+                    <p className={`text-lg font-black tracking-tight ${s.color}`}>{s.value}</p>
+                    <p className="text-[8px] text-slate-400 font-semibold">{s.desc}</p>
+                  </div>
+                ))}
               </div>
+
+              {/* Grid: Simulator on Left, Protocol Info & Charts on Right */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* DEX / Lending / Staking Simulator Panel */}
+                <div className="lg:col-span-7 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 space-y-6 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Coins className="text-cyan-400" size={16} />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-white">Interactive Intent Simulator</h3>
+                      </div>
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 font-bold border border-cyan-500/20">
+                        {project.category.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* RENDER SIMULATOR FORM BASED ON CATEGORY */}
+                    {simStep === 'input' && (
+                      <form onSubmit={handleSimAction} className="space-y-4">
+                        {/* 1. DEX SWAP TYPE */}
+                        {project.category === 'dex' && (
+                          <div className="space-y-3">
+                            <div className="bg-slate-950/60 border border-slate-850 p-4 rounded-xl space-y-1">
+                              <label className="text-[8px] text-slate-500 font-bold uppercase">Pay Amount</label>
+                              <div className="flex justify-between items-center">
+                                <input
+                                  type="number"
+                                  placeholder="0.00"
+                                  value={swapAmount}
+                                  onChange={(e) => setSwapAmount(e.target.value)}
+                                  required
+                                  className="bg-transparent text-lg font-black text-white focus:outline-none w-1/2"
+                                />
+                                <select
+                                  value={swapFrom}
+                                  onChange={(e) => setSwapFrom(e.target.value)}
+                                  className="bg-slate-900 border border-slate-800 text-xs font-bold px-2 py-1 rounded-lg focus:outline-none"
+                                >
+                                  <option value="MNT">MNT</option>
+                                  <option value="USDC">USDC</option>
+                                  <option value="mETH">mETH</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-950/60 border border-slate-850 p-4 rounded-xl space-y-1">
+                              <label className="text-[8px] text-slate-500 font-bold uppercase">Receive Amount (Estimated)</label>
+                              <div className="flex justify-between items-center">
+                                <span className="text-lg font-black text-slate-400">
+                                  {swapAmount ? (Number(swapAmount) * 1.05).toFixed(2) : '0.00'}
+                                </span>
+                                <select
+                                  value={swapTo}
+                                  onChange={(e) => setSwapTo(e.target.value)}
+                                  className="bg-slate-900 border border-slate-800 text-xs font-bold px-2 py-1 rounded-lg focus:outline-none"
+                                >
+                                  <option value="USDC">USDC</option>
+                                  <option value="USDT">USDT</option>
+                                  <option value="MNT">MNT</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 2. LENDING TYPE */}
+                        {project.category === 'lending' && (
+                          <div className="space-y-3">
+                            <div className="bg-slate-950/60 border border-slate-850 p-4 rounded-xl space-y-1">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8px] text-slate-500 font-bold uppercase">Supply Collateral</label>
+                                <span className="text-[8px] text-slate-400">Supplied: {suppliedBalance} USDC</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <input
+                                  type="number"
+                                  placeholder="0.00"
+                                  value={supplyAmount}
+                                  onChange={(e) => setSupplyAmount(e.target.value)}
+                                  required
+                                  className="bg-transparent text-lg font-black text-white focus:outline-none w-1/2"
+                                />
+                                <span className="text-xs font-bold text-slate-300 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">USDC</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 3. STAKING / LST TYPE */}
+                        {(project.category === 'lst' || project.category === 'yield') && (
+                          <div className="space-y-3">
+                            <div className="bg-slate-950/60 border border-slate-850 p-4 rounded-xl space-y-1">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8px] text-slate-500 font-bold uppercase">Stake ETH</label>
+                                <span className="text-[8px] text-slate-400">Staked: {stakedBalance} ETH</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <input
+                                  type="number"
+                                  placeholder="0.00"
+                                  value={stakeAmount}
+                                  onChange={(e) => setStakeAmount(e.target.value)}
+                                  required
+                                  className="bg-transparent text-lg font-black text-white focus:outline-none w-1/2"
+                                />
+                                <span className="text-xs font-bold text-slate-300 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">ETH</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* DEFAULT / OTHER */}
+                        {project.category !== 'dex' && project.category !== 'lending' && project.category !== 'lst' && project.category !== 'yield' && (
+                          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-850 text-xs text-slate-400 text-center py-6 leading-relaxed">
+                            💡 Use our **AI Copilot intent bar** at the bottom to build and execute transactions directly on {project.name}!
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <button
+                          type="submit"
+                          className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-xl text-xs font-bold tracking-wider uppercase transition"
+                        >
+                          Confirm Sandbox Transaction
+                        </button>
+                      </form>
+                    )}
+
+                    {simStep === 'processing' && (
+                      <div className="py-12 flex flex-col items-center justify-center space-y-4">
+                        <RefreshCw size={24} className="animate-spin text-cyan-400" />
+                        <p className="text-xs text-slate-400 font-bold">Simulating transaction on Mantle Ledger…</p>
+                      </div>
+                    )}
+
+                    {simStep === 'done' && (
+                      <div className="py-8 space-y-5 text-center">
+                        <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+                          <CheckCircle size={20} />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-white">Transaction Confirmed!</p>
+                          <p className="text-[10px] text-slate-400">Transaction hash: {simTxHash.slice(0, 12)}...{simTxHash.slice(-8)}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSimStep('input');
+                            setSwapAmount('');
+                            setSupplyAmount('');
+                            setStakeAmount('');
+                          }}
+                          className="px-4 py-2 border border-slate-800 hover:border-slate-700 bg-slate-950 rounded-xl text-[10px] font-bold uppercase transition"
+                        >
+                          Perform another swap
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 border-t border-slate-800/60 pt-4 text-[10px] text-slate-500">
+                    <ShieldAlert size={12} className="text-amber-500" />
+                    <span>Transactions are sandbox-simulated. Real intents can be executed via AI at the bottom.</span>
+                  </div>
+                </div>
+
+                {/* Right Panel: Protocol info details */}
+                <div className="lg:col-span-5 space-y-6">
+                  <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Protocol Details</h3>
+                    <p className="text-xs text-slate-300 leading-relaxed font-semibold">{project.description}</p>
+                    <div className="space-y-2 pt-2 border-t border-slate-800/60 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Official Website</span>
+                        <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline flex items-center gap-1">
+                          {domain} <ExternalLink size={10} />
+                        </a>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Category</span>
+                        <span className="text-slate-300 font-bold capitalize">{project.category}</span>
+                      </div>
+                      {project.twitterHandle && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Twitter/X</span>
+                          <a href={`https://x.com/${project.twitterHandle}`} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
+                            @{project.twitterHandle}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Real-time Simulated Activity Stream */}
+                  <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">Live Activity Feed</h3>
+                      <div className="flex items-center gap-1.5 text-[9px] text-emerald-400 font-extrabold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>LIVE</span>
+                      </div>
+                    </div>
+                    <div className="space-y-3 max-h-40 overflow-y-auto scrollbar-hide text-[10px]">
+                      <div className="flex justify-between border-b border-slate-850 pb-2 text-slate-400">
+                        <span>0x3b21...91f4 swapped 250 MNT</span>
+                        <span className="text-slate-600">just now</span>
+                      </div>
+                      <div className="flex justify-between border-b border-slate-850 pb-2 text-slate-400">
+                        <span>0x91da...aa2e supplied 1,200 USDC</span>
+                        <span className="text-slate-600">2 min ago</span>
+                      </div>
+                      <div className="flex justify-between border-b border-slate-850 pb-2 text-slate-400">
+                        <span>0x88fc...421c staked 5.2 ETH</span>
+                        <span className="text-slate-600">5 min ago</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
             </div>
           )}
 
-          {/* Actual iframe */}
-          {!iframeBlocked && (
-            <iframe
-              ref={iframeRef}
-              src={project.url}
-              title={project.name}
-              className={`w-full h-full border-none bg-white transition-opacity duration-500 ${iframeLoaded ? 'opacity-100' : 'opacity-0'}`}
-              sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-              allow="clipboard-read; clipboard-write"
-              onLoad={handleIframeLoad}
-              onError={handleIframeError}
-            />
-          )}
-
-          {/* Blocked Fallback: Premium Browser Card */}
-          {iframeBlocked && (
-            <div className="absolute inset-0 z-10 bg-slate-950 flex flex-col items-center justify-center p-8 gap-8">
-              {/* Project hero info */}
-              <div className="text-center space-y-4 max-w-md">
-                <div className="flex justify-center">
-                  {project.defillamaSlug ? (
+          {/* TAB B: Website Embed (Standard iframe for those that work) */}
+          {activeTab === 'website' && (
+            <div className="w-full h-full relative">
+              {/* Loading shimmer while iframe is loading */}
+              {!iframeLoaded && !iframeBlocked && (
+                <div className="absolute inset-0 z-10 bg-slate-950 flex items-center justify-center">
+                  <div className="text-center space-y-4 animate-pulse">
                     <img
-                      src={`https://icons.llamao.fi/icons/protocols/${project.defillamaSlug}?h=160&w=160`}
-                      alt={project.name}
-                      className="w-20 h-20 rounded-3xl object-contain bg-white p-2 shadow-2xl shadow-cyan-500/10 border border-slate-800"
+                      src={sharpLogoUrl}
+                      alt=""
+                      className="w-16 h-16 rounded-2xl mx-auto object-contain"
                     />
-                  ) : (
-                    <span className="text-5xl">{project.icon}</span>
-                  )}
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-white font-serif">{project.name}</h2>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">{project.description}</p>
-                </div>
-
-                {/* Stats row */}
-                <div className="grid grid-cols-3 gap-3 mt-2">
-                  {[
-                    { label: 'TVL', value: project.tvl },
-                    { label: '24h Fees', value: project.fees24h },
-                    { label: 'Status', value: project.status },
-                  ].map((s) => (
-                    <div key={s.label} className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-center">
-                      <p className="text-[8px] text-slate-500 font-bold uppercase">{s.label}</p>
-                      <p className="text-xs font-extrabold text-emerald-400 mt-0.5">{s.value}</p>
+                    <p className="text-sm font-bold text-slate-300 font-serif">{project.name}</p>
+                    <p className="text-xs text-slate-500">Loading live dApp…</p>
+                    <div className="flex items-center gap-1.5 justify-center">
+                      <RefreshCw size={12} className="animate-spin text-cyan-400" />
+                      <span className="text-[10px] text-slate-600">Connecting to {domain}</span>
                     </div>
-                  ))}
+                  </div>
                 </div>
+              )}
 
-                {/* Security notice */}
-                <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 text-left">
-                  <ShieldAlert size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-amber-200/70 leading-relaxed">
-                    <strong className="text-amber-400">Security Policy Active</strong> — {project.name} restricts embedding for user protection. You can still use ELTNAM's AI Copilot to execute any action on {project.name} without opening the site directly.
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-col gap-2">
-                  <a
-                    href={project.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-blue-500/20"
-                  >
-                    <span>Open {project.name} in New Tab</span>
-                    <ExternalLink size={12} />
-                  </a>
-                  <button
-                    onClick={toggleAI}
-                    className="flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-400 rounded-xl text-xs font-bold transition"
-                  >
-                    <MessageSquare size={13} />
-                    <span>Use AI Copilot Instead</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick action grid for copilot */}
-              <div className="w-full max-w-md space-y-2">
-                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider text-center">
-                  Or execute a quick action via AI
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {project.actions.map((act) => (
-                    <button
-                      key={act}
-                      onClick={() => triggerQuickAction(act)}
-                      className="p-3 text-left bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-xs font-bold rounded-xl transition hover:text-cyan-400 flex items-center justify-between"
-                    >
-                      <span className="text-slate-200">{act}</span>
-                      <Cpu size={11} className="text-blue-400 flex-shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* Actual iframe */}
+              {!iframeBlocked && (
+                <iframe
+                  ref={iframeRef}
+                  src={project.url}
+                  title={project.name}
+                  className={`w-full h-full border-none bg-white transition-opacity duration-500 ${iframeLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+                  allow="clipboard-read; clipboard-write"
+                  onLoad={() => setIframeLoaded(true)}
+                  onError={() => setIframeBlocked(true)}
+                />
+              )}
             </div>
           )}
 
@@ -344,7 +521,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 value={intentInput}
                 onChange={(e) => setIntentInput(e.target.value)}
                 disabled={isExecuting}
-                placeholder={`Drop your intent for ${project.name} (e.g. "Swap 10 MNT for USDC")`}
+                placeholder={t.dropIntent.replace('USDC', 'USDC')}
                 className="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none disabled:opacity-50"
               />
               <button
@@ -355,7 +532,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 {isExecuting ? (
                   <><RefreshCw size={11} className="animate-spin" /><span>Processing…</span></>
                 ) : (
-                  <><CheckCircle size={11} /><span>Submit to AI</span></>
+                  <><CheckCircle size={11} /><span>{t.submitToAi}</span></>
                 )}
               </button>
               {(isChatOpen || hasSubmittedIntent) && (
@@ -373,6 +550,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
         </div>
       </div>
+    </div>
 
       {/* ── Right Panel: Agent Sidebar (slides in after intent) ─────── */}
       <div

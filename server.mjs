@@ -124,7 +124,7 @@ async function handleRequest(req, res) {
     req.on('data', (chunk) => { body += chunk; });
     req.on('end', async () => {
       try {
-        const { message, address, history = [] } = JSON.parse(body);
+        const { message, address, balance = '0.00', history = [] } = JSON.parse(body);
 
         const messages = [
           ...history
@@ -144,7 +144,7 @@ async function handleRequest(req, res) {
             model: 'claude-sonnet-4-5',
             max_tokens: 1024,
             stream: true,
-            system: `You are the Mantle Ecosystem Agent — an elite guide for the Mantle L2 network (Chain ID: 5000). User wallet: ${address}. Be concise, data-backed, and risk-aware. Never expose API keys. Risk score every recommendation 1-10.`,
+            system: `You are the Mantle Ecosystem Agent — an elite guide for the Mantle L2 network (Chain ID: 5000). User wallet: ${address}. User balance: ${balance} MNT. Be concise, data-backed, and risk-aware. Never expose API keys. Risk score every recommendation 1-10.`,
             messages,
           }),
         });
