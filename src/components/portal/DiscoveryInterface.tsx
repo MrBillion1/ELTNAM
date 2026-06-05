@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import {
   Zap,
@@ -14,7 +14,9 @@ import {
   ChevronRight,
   LogOut,
   Wallet,
-  ChevronDown
+  ChevronDown,
+  Search,
+  Globe
 } from 'lucide-react';
 import { MANTLE_PROJECTS } from '../../lib/mantleProjects';
 import type { Project } from '../../lib/mantleProjects';
@@ -47,26 +49,32 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
 
   const t = TRANSLATIONS[language];
 
-  // Privy auth hooks
+  // --- Privy auth ---
   const { login: privyLogin, logout: privyLogout, authenticated: privyAuthenticated } = usePrivy();
   const { wallets: privyWallets } = useWallets();
 
-  // Failsafe local state for desktop connect mockup when library doesn't respond
+  // Mock fallback ONLY used when Privy is completely unavailable (e.g. sandbox env without a valid App ID)
   const [mockUser, setMockUser] = useState<any>(null);
   const [mockWallets, setMockWallets] = useState<any[]>([]);
+  const mockTriggeredRef = useRef(false);
 
+  // Real auth state wins. Mock only fills in if Privy never authenticated.
   const authenticated = privyAuthenticated || !!mockUser;
   const wallets = privyWallets.length > 0 ? privyWallets : mockWallets;
+  // Use any EVM wallet returned by Privy (could be embedded or injected)
+  const evmWallet = wallets.find((w) => (w as any).chainType === 'ethereum') ?? wallets[0] ?? null;
 
   const login = () => {
+    mockTriggeredRef.current = false;
     try {
       privyLogin();
     } catch (err) {
       console.warn('Privy login error:', err);
     }
-    // Sandbox failsafe: if Privy fails to mount/respond within 600ms, auto-connect a mock Mantle wallet
+    // Fallback mock: only fires if Privy never sets authenticated after 2s
     setTimeout(() => {
-      if (!usePortalStore.getState().user) {
+      if (!privyAuthenticated && !mockTriggeredRef.current) {
+        mockTriggeredRef.current = true;
         const dummyWallet = {
           address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
           chainType: 'ethereum',
@@ -79,8 +87,16 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           wallets: [dummyWallet] as any,
         });
       }
-    }, 600);
+    }, 2000);
   };
+
+  // Clear mock state when Privy actually authenticates
+  useEffect(() => {
+    if (privyAuthenticated && mockUser) {
+      setMockUser(null);
+      setMockWallets([]);
+    }
+  }, [privyAuthenticated, mockUser]);
 
   const logout = () => {
     try {
@@ -88,6 +104,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     } catch (err) {
       console.warn(err);
     }
+    mockTriggeredRef.current = false;
     setMockUser(null);
     setMockWallets([]);
     setPortalState({ user: null, wallets: [] });
@@ -98,8 +115,9 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   const [copied, setCopied] = useState(false);
   const [userBalance, setUserBalance] = useState<string>('0.00');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isLangOpen, setIsLangOpen] = useState(false);
 
-  // Filter projects by category and search query
+  // --- Filtered projects ---
   const filteredProjects = useMemo(() => {
     let list = MANTLE_PROJECTS;
     if (activeCategory !== 'all') {
@@ -111,25 +129,23 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.description.toLowerCase().includes(q) ||
-          p.tags.some((t) => t.toLowerCase().includes(q))
+          p.tags.some((tag) => tag.toLowerCase().includes(q))
       );
     }
     return list;
   }, [activeCategory, searchQuery]);
 
-  // Reset page when category or search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [activeCategory, searchQuery]);
 
-  // Pagination calculations
   const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
   const paginatedProjects = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredProjects.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredProjects, currentPage]);
 
-  // Fetch real-time Mantle stats
+  // --- Chain stats ---
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -138,7 +154,6 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           mantlePublicClient.getGasPrice(),
         ]);
         const gasGwei = (Number(gas) / 1e9).toFixed(3) + ' Gwei';
-        
         setPortalState({
           chainStats: {
             ...chainStats,
@@ -150,14 +165,12 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         console.warn('[ELTNAM] Failed to fetch real-time chain stats:', e);
       }
     };
-
     fetchStats();
     const interval = setInterval(fetchStats, 10000);
     return () => clearInterval(interval);
   }, [setPortalState]);
 
-  // Fetch user balance if wallet is active
-  const evmWallet = wallets.find((w) => (w as any).chainType === 'ethereum');
+  // --- Balance polling ---
   useEffect(() => {
     if (!evmWallet?.address) {
       setUserBalance('0.00');
@@ -194,7 +207,6 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     }
   };
 
-  // Generate pagination buttons array
   const paginationRange = useMemo(() => {
     const range = [];
     const maxVisible = 5;
@@ -203,72 +215,80 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     } else {
       let start = Math.max(1, currentPage - 2);
       let end = Math.min(totalPages, currentPage + 2);
-      if (start === 1) {
-        end = maxVisible;
-      } else if (end === totalPages) {
-        start = totalPages - maxVisible + 1;
-      }
+      if (start === 1) end = maxVisible;
+      else if (end === totalPages) start = totalPages - maxVisible + 1;
       for (let i = start; i <= end; i++) range.push(i);
     }
     return range;
   }, [currentPage, totalPages]);
 
+  // Current language display
+  const currentLang = LANGUAGES.find((l) => l.key === language) ?? LANGUAGES[0];
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-gradient)] text-[var(--text-primary)] relative animate-in font-sans theme-transition">
-      
+
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto flex flex-col scrollbar-hide">
-        
-        {/* Navigation Header */}
-        <header className="px-6 py-4 border-b border-[var(--border-primary)] flex items-center justify-between sticky top-0 bg-[var(--header-bg)] backdrop-blur-xl z-40 theme-transition">
-          <div className="flex items-center gap-3">
+
+        {/* ── Navigation Header ── */}
+        <header className="px-4 sm:px-6 py-3.5 border-b border-[var(--border-primary)] flex items-center justify-between sticky top-0 bg-[var(--header-bg)] backdrop-blur-xl z-40 theme-transition gap-3">
+
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 flex-shrink-0">
             <div className="w-8 h-8 bg-gradient-to-br from-[#00e6b4] to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-[#00e6b4]/20">
               <Zap size={16} className="text-slate-900" />
             </div>
-            <span className="font-extrabold text-lg tracking-wider text-[var(--text-primary)] uppercase">ELTNAM</span>
+            <span className="font-extrabold text-base tracking-wider text-[var(--text-primary)] uppercase hidden sm:block">ELTNAM</span>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Search Input */}
-            <input
-              type="text"
-              placeholder={t.searchPlaceholder}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-4 py-2 text-xs rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] theme-transition w-40 sm:w-60"
-            />
+          {/* Right controls */}
+          <div className="flex items-center gap-2 ml-auto">
 
-            {/* Language Selector Dropdown */}
-            <div className="relative">
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as any)}
-                className="appearance-none pl-3 pr-8 py-2.5 text-xs font-bold rounded-xl border border-[var(--border-primary)] hover:border-[var(--border-hover)] bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] text-[var(--text-primary)] focus:outline-none theme-transition cursor-pointer"
-              >
-                {LANGUAGES.map((l) => (
-                  <option key={l.key} value={l.key} className="bg-slate-900 text-white">
-                    {l.flag} {l.name}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-secondary)] text-[8px]">
-                ▼
-              </div>
-            </div>
-
-            {/* Theme Switcher */}
+            {/* Theme toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2.5 rounded-xl border border-[var(--border-primary)] hover:border-[var(--border-hover)] bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] theme-transition"
+              className="p-2 rounded-xl border border-[var(--border-primary)] hover:border-[var(--border-hover)] bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] theme-transition"
               title="Toggle Theme"
             >
-              {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+              {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
             </button>
 
-            {/* Ask AI Button */}
+            {/* Language — compact flag + code + chevron */}
+            <div className="relative">
+              <button
+                onClick={() => setIsLangOpen(!isLangOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl border border-[var(--border-primary)] hover:border-[var(--border-hover)] bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] text-[var(--text-primary)] theme-transition text-xs font-bold"
+              >
+                <Globe size={13} className="text-[var(--text-secondary)]" />
+                <span>{currentLang.key.toUpperCase()}</span>
+                <ChevronDown size={11} className={`text-[var(--text-secondary)] transition-transform duration-200 ${isLangOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isLangOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsLangOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-44 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 py-1">
+                    {LANGUAGES.map((l) => (
+                      <button
+                        key={l.key}
+                        onClick={() => { setLanguage(l.key as any); setIsLangOpen(false); }}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-bold hover:bg-[var(--card-hover-bg)] transition text-left ${language === l.key ? 'text-[var(--accent-color)]' : 'text-[var(--text-primary)]'}`}
+                      >
+                        <span className="text-base">{l.flag}</span>
+                        <span>{l.name}</span>
+                        {language === l.key && <CheckCircle size={11} className="ml-auto text-[var(--accent-color)]" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Ask AI */}
             <button
               onClick={() => setPortalState({ isChatOpen: !isChatOpen })}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-md border ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-md border ${
                 isChatOpen
                   ? 'bg-[var(--accent-color)] border-[var(--accent-color)] text-slate-950 shadow-[var(--accent-color)]/20'
                   : 'bg-[var(--bg-secondary)] hover:bg-[var(--card-hover-bg)] border-[var(--border-primary)] text-[var(--text-primary)]'
@@ -278,149 +298,139 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               <span className="hidden sm:inline">{t.askAi}</span>
             </button>
 
-            {/* Wallet Authentication Button */}
-            {authenticated && evmWallet ? (
-              <div className="flex items-center gap-2 relative">
-                <div
-                  onClick={() => setIsWalletModalOpen(!isWalletModalOpen)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl text-xs font-semibold hover:border-[var(--border-hover)] cursor-pointer theme-transition shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="font-mono text-[11px] text-[var(--text-primary)]">
-                    {evmWallet.address.slice(0, 6)}...{evmWallet.address.slice(-4)}
-                  </span>
-                  <span className="text-[10px] text-emerald-500 font-extrabold ml-1">{userBalance} MNT</span>
-                  <ChevronDown size={11} className={`text-[var(--text-secondary)] transition-transform duration-200 ${isWalletModalOpen ? 'rotate-180' : ''}`} />
-                </div>
+            {/* ── Wallet Button ── */}
+            {authenticated ? (
+              evmWallet ? (
+                /* Wallet connected — show address + balance chip + dropdown */
+                <div className="flex items-center gap-2 relative">
+                  <div
+                    onClick={() => setIsWalletModalOpen(!isWalletModalOpen)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl text-xs font-semibold hover:border-[var(--border-hover)] cursor-pointer theme-transition shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-mono text-[11px] text-[var(--text-primary)]">
+                      {evmWallet.address.slice(0, 6)}...{evmWallet.address.slice(-4)}
+                    </span>
+                    <span className="text-[10px] text-emerald-500 font-extrabold ml-1 hidden sm:inline">{userBalance} MNT</span>
+                    <ChevronDown size={11} className={`text-[var(--text-secondary)] transition-transform duration-200 ${isWalletModalOpen ? 'rotate-180' : ''}`} />
+                  </div>
 
-                {isWalletModalOpen && (
-                  <>
-                    {/* Fixed full screen invisible backdrop to close dropdown when clicking outside */}
-                    <div
-                      className="fixed inset-0 z-40 cursor-default bg-transparent"
-                      onClick={() => setIsWalletModalOpen(false)}
-                    />
-                    
-                    {/* Dropdown Modal details container */}
-                    <div className="absolute right-0 top-full mt-2.5 w-72 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-2xl p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-3 mb-3.5">
-                        <span className="text-[10px] text-[var(--text-secondary)] font-extrabold uppercase tracking-wider">Connected Wallet</span>
-                        <span className="flex items-center gap-1.5 text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Mantle Mainnet
-                        </span>
-                      </div>
+                  {isWalletModalOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsWalletModalOpen(false)} />
+                      <div className="absolute right-0 top-full mt-2.5 w-72 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-2xl p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-3 mb-3.5">
+                          <span className="text-[10px] text-[var(--text-secondary)] font-extrabold uppercase tracking-wider">Connected Wallet</span>
+                          <span className="flex items-center gap-1.5 text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Mantle Mainnet
+                          </span>
+                        </div>
 
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00e6b4] to-cyan-500 flex items-center justify-center font-black text-slate-950 shadow-md shadow-[#00e6b4]/10">
-                            {evmWallet.address.slice(2, 4).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Connected via Privy</p>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono text-xs text-[var(--text-primary)] truncate font-extrabold">
-                                {evmWallet.address.slice(0, 10)}...{evmWallet.address.slice(-8)}
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyAddress();
-                                }}
-                                className="p-1 hover:bg-[var(--bg-primary)] rounded-lg transition text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                title="Copy Address"
-                              >
-                                {copied ? <CheckCircle size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                              </button>
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00e6b4] to-cyan-500 flex items-center justify-center font-black text-slate-950 shadow-md shadow-[#00e6b4]/10">
+                              {evmWallet.address.slice(2, 4).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Connected via Privy</p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-xs text-[var(--text-primary)] truncate font-extrabold">
+                                  {evmWallet.address.slice(0, 10)}...{evmWallet.address.slice(-8)}
+                                </span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); copyAddress(); }}
+                                  className="p-1 hover:bg-[var(--bg-primary)] rounded-lg transition text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                  title="Copy Address"
+                                >
+                                  {copied ? <CheckCircle size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Balance display */}
-                        <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-3.5 flex justify-between items-center shadow-inner">
-                          <div>
-                            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Mantle Balance</p>
-                            <p className="text-base font-black text-[var(--text-primary)] tracking-tight">{userBalance} MNT</p>
+                          {/* Balance */}
+                          <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl p-3.5 flex justify-between items-center shadow-inner">
+                            <div>
+                              <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Mantle Balance</p>
+                              <p className="text-base font-black text-[var(--text-primary)] tracking-tight">{userBalance} MNT</p>
+                            </div>
+                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                              <Wallet size={16} />
+                            </div>
                           </div>
-                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                            <Wallet size={16} />
-                          </div>
-                        </div>
 
-                        {/* Links section */}
-                        <div className="space-y-1 pt-2 border-t border-[var(--border-primary)]">
-                          <a
-                            href={`https://explorer.mantle.xyz/address/${evmWallet.address}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between p-2 hover:bg-[var(--card-hover-bg)] rounded-xl text-[10px] font-bold text-[var(--text-primary)] border border-transparent hover:border-[var(--border-primary)] transition"
-                          >
-                            <span className="flex items-center gap-1.5">🌐 View on Explorer</span>
-                            <ExternalLink size={11} className="text-[var(--text-secondary)]" />
-                          </a>
+                          {/* Links */}
+                          <div className="space-y-1 pt-2 border-t border-[var(--border-primary)]">
+                            <a
+                              href={`https://explorer.mantle.xyz/address/${evmWallet.address}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-between p-2 hover:bg-[var(--card-hover-bg)] rounded-xl text-[10px] font-bold text-[var(--text-primary)] border border-transparent hover:border-[var(--border-primary)] transition"
+                            >
+                              <span className="flex items-center gap-1.5">🌐 View on Explorer</span>
+                              <ExternalLink size={11} className="text-[var(--text-secondary)]" />
+                            </a>
 
-                          <button
-                            onClick={() => {
-                              setIsWalletModalOpen(false);
-                              setPortalState({ isChatOpen: true });
-                              // Add a direct user intent to query balance
-                              const triggerIntent = async () => {
-                                // Add user message
+                            <button
+                              onClick={() => {
+                                setIsWalletModalOpen(false);
                                 setPortalState({ isChatOpen: true });
-                                const chatInput = document.querySelector('input[placeholder*="ask anything"]');
-                                if (chatInput) {
-                                  const form = chatInput.closest('form');
-                                  if (form) {
-                                    const inputEl = form.querySelector('input');
-                                    if (inputEl) {
-                                      inputEl.value = "What is my account balance?";
-                                      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-                                    }
-                                    setTimeout(() => {
-                                      form.dispatchEvent(new Event('submit', { bubbles: true }));
-                                    }, 50);
+                                setTimeout(() => {
+                                  const chatInput = document.querySelector('input[placeholder*="ask anything"]') as HTMLInputElement | null;
+                                  if (chatInput) {
+                                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                                    nativeInputValueSetter?.call(chatInput, 'What is my account balance?');
+                                    chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    const form = chatInput.closest('form');
+                                    if (form) setTimeout(() => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })), 80);
                                   }
-                                }
-                              };
-                              triggerIntent();
-                            }}
-                            className="w-full flex items-center justify-between p-2 hover:bg-[var(--card-hover-bg)] rounded-xl text-[10px] font-bold text-[var(--text-primary)] border border-transparent hover:border-[var(--border-primary)] transition text-left"
+                                }, 200);
+                              }}
+                              className="w-full flex items-center justify-between p-2 hover:bg-[var(--card-hover-bg)] rounded-xl text-[10px] font-bold text-[var(--text-primary)] border border-transparent hover:border-[var(--border-primary)] transition text-left"
+                            >
+                              <span className="flex items-center gap-1.5">💬 Ask AI about my balance</span>
+                              <MessageSquare size={11} className="text-[var(--text-secondary)]" />
+                            </button>
+                          </div>
+
+                          {/* Logout */}
+                          <button
+                            onClick={() => { setIsWalletModalOpen(false); logout(); }}
+                            className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/10 hover:border-red-500/20 rounded-xl text-[10px] font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5"
                           >
-                            <span className="flex items-center gap-1.5">💬 Ask AI about my balance</span>
-                            <MessageSquare size={11} className="text-[var(--text-secondary)]" />
+                            <LogOut size={12} />
+                            Disconnect Wallet
                           </button>
                         </div>
-
-                        {/* Logout button */}
-                        <button
-                          onClick={() => {
-                            setIsWalletModalOpen(false);
-                            logout();
-                          }}
-                          className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/10 hover:border-red-500/20 rounded-xl text-[10px] font-extrabold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5"
-                        >
-                          <LogOut size={12} />
-                          Disconnect Wallet
-                        </button>
                       </div>
-                    </div>
-                  </>
-                )}
-              </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                /* Authenticated but wallet still loading — show connecting state */
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl text-[11px] font-semibold text-[var(--text-secondary)] cursor-default">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span>Loading wallet…</span>
+                </div>
+              )
             ) : (
+              /* Not authenticated — show connect button */
               <button
                 onClick={login}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-blue-500/15"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-blue-500/15 transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Wallet size={13} />
                 <span>{t.connectWallet}</span>
               </button>
             )}
           </div>
-        </header>        {/* Brand Banner (Imitating Mantle UI from the reference image) */}
+        </header>
+
+        {/* ── Brand Banner ── */}
         <div className="p-4 md:p-6 animate-in">
           <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#b6fdf0] to-[#e4fffa] dark:from-[#04241d] dark:to-[#083a2f] border border-[#00e6b4]/20 p-5 md:p-8 flex flex-col xl:flex-row items-center justify-between gap-6 shadow-xl shadow-[#00e6b4]/5">
-            {/* Absolute overlapping vector circles decoration */}
+            {/* Decorative circles */}
             <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20">
               <div className="absolute -left-10 -top-10 w-48 h-48 rounded-full bg-[#00e6b4]/20 blur-xl" />
               <div className="absolute right-10 bottom-0 w-80 h-80 rounded-full border border-[#00e6b4]/10 flex items-center justify-center">
@@ -439,7 +449,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               </p>
             </div>
 
-            {/* Real-time stats bar integrated directly into the brand banner */}
+            {/* Live stats */}
             <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 min-w-[280px] xl:max-w-3xl">
               {[
                 { label: t.ecosystemTvl, value: chainStats.tvl, desc: chainStats.tvlChange, color: 'text-emerald-600 dark:text-emerald-400' },
@@ -457,16 +467,52 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             </div>
           </div>
         </div>
-        {/* Category Pill Pinned Selector */}
-        <div className="px-6 md:px-8">
+
+        {/* ── Explore Section Header — Search + Category bar ── */}
+        <div className="px-4 md:px-6 pt-2 pb-0">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            {/* "Explore" label + Search (Mantle-style: left side) */}
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <h2 className="text-xl font-extrabold text-[var(--text-primary)] flex-shrink-0 hidden sm:block">Explore</h2>
+              <div className="relative flex-1 max-w-xs">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={t.searchPlaceholder}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/20 theme-transition"
+                />
+              </div>
+            </div>
+
+            {/* Result count (right side) */}
+            <div className="flex-shrink-0 text-[11px] text-[var(--text-secondary)] font-bold hidden sm:block">
+              {filteredProjects.length} dApp{filteredProjects.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+
+          {/* Mobile search (shown separately on small screens) */}
+          <div className="sm:hidden mb-3 relative">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" />
+            <input
+              type="text"
+              placeholder={t.searchPlaceholder}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/20 theme-transition"
+            />
+          </div>
+
+          {/* Category pills */}
           <CategoryBar
             activeCategory={activeCategory}
             onSelectCategory={(id) => setPortalState({ activeCategory: id })}
           />
         </div>
 
-        {/* Paginated Grid List */}
-        <div className="flex-1 p-6 md:p-8">
+        {/* ── Project Grid ── */}
+        <div className="flex-1 p-4 md:p-6 pt-4">
           {paginatedProjects.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {paginatedProjects.map((proj) => (
@@ -485,7 +531,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             </div>
           )}
 
-          {/* Simple Premium Pagination */}
+          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-1.5 mt-8 border-t border-[var(--border-primary)] pt-6">
               <button
@@ -522,7 +568,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         </div>
       </div>
 
-      {/* Semi-transparent backdrop overlay to dismiss the Ask AI sidebar on tap */}
+      {/* Backdrop to close AI sidebar */}
       {isChatOpen && (
         <div
           onClick={() => setPortalState({ isChatOpen: false })}
@@ -530,10 +576,10 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         />
       )}
 
-      {/* Floating Ask AI slide-over chat drawer */}
+      {/* AI Sidebar */}
       <AgentSidebar onLaunchDApp={onProceedToDApp} />
 
-      {/* Slide-Up Detail Panel overlay */}
+      {/* Project Detail Panel */}
       {selectedProject && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center animate-in">
           <div className="w-full max-w-2xl bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] rounded-t-3xl p-6 md:p-8 space-y-6 shadow-2xl relative">
@@ -577,16 +623,19 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               </div>
             </div>
 
-            {/* Actions list */}
             <div className="space-y-2">
               <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.quickActions}</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {selectedProject.actions.map((act) => (
                   <button
                     key={act}
-                    onClick={() => {
-                      setPortalState({ selectedProject: null, isChatOpen: true });
-                    }}
+                    onClick={() =>
+                      setPortalState({
+                        selectedProject: null,
+                        isChatOpen: true,
+                        chatInputQueue: `I want to ${act.toLowerCase()} on ${selectedProject.name}`,
+                      })
+                    }
                     className="p-3 bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--accent-color)] text-xs rounded-xl hover:-translate-y-0.5 transition text-[var(--text-primary)] font-semibold flex items-center justify-between text-left group"
                   >
                     <span>{act}</span>

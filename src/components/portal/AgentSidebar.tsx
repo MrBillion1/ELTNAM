@@ -18,13 +18,33 @@ interface AgentSidebarProps {
 }
 
 export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
-  const { messages, addMessage, updateMessage, clearHistory, wallets, isChatOpen, setPortalState, selectedProject, activeInterface } = usePortalStore();
+  const {
+    messages,
+    addMessage,
+    updateMessage,
+    clearHistory,
+    wallets,
+    isChatOpen,
+    setPortalState,
+    selectedProject,
+    activeInterface,
+    chatInputQueue,
+  } = usePortalStore();
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showProjectSearch, setShowProjectSearch] = useState(false);
   const [isAlphabetSearchOpen, setIsAlphabetSearchOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-send queued prompts (e.g. from quick actions)
+  useEffect(() => {
+    if (isChatOpen && chatInputQueue) {
+      const prompt = chatInputQueue;
+      setPortalState({ chatInputQueue: null });
+      handleSend(prompt);
+    }
+  }, [isChatOpen, chatInputQueue]);
 
   // Auto-scroll to bottom
   useEffect(() => {

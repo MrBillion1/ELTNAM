@@ -39,6 +39,7 @@ interface PortalState {
   language: LanguageKey;
   chainStats: ChainStats;
   userBalance: string;
+  chatInputQueue: string | null;
   setPortalState: (state: Partial<PortalState>) => void;
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
@@ -66,6 +67,7 @@ export const usePortalStore = create<PortalState>((set) => ({
   theme: 'dark',
   isChatOpen: false,
   userBalance: '0.00',
+  chatInputQueue: null,
   chainStats: {
     tvl: '$4.38B',
     chainTvl: '$338.5M',
