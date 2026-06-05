@@ -8,6 +8,7 @@ import { usePortalStore } from '../../store/usePortalStore';
 import { AgentSidebar } from './AgentSidebar';
 import { mantlePublicClient } from '../../lib/chains';
 import { TRANSLATIONS } from '../../lib/translations';
+import { ProjectLogo } from '../shared/ProjectLogo';
 
 interface DAppInterfaceProps {
   project: Project;
@@ -170,11 +171,10 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
           {/* Project Details */}
           <div className="flex items-center gap-2.5">
-            <img
-              src={sharpLogoUrl}
-              alt={project.name}
+            <ProjectLogo
+              project={project}
               className="w-6 h-6 rounded-md object-contain bg-white p-0.5 border border-slate-700"
-              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+              size={24}
             />
             <span className="text-xs font-black text-white font-serif tracking-tight">{project.name}</span>
             <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold uppercase tracking-wider">

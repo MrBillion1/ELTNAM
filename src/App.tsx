@@ -23,6 +23,7 @@ export default function App() {
           theme: 'dark',
           accentColor: '#00e6b4',
           showWalletLoginFirst: false,
+          logo: '/eltnam-logo.jpg',
         },
         loginMethods: ['wallet', 'google', 'twitter', 'discord', 'email', 'sms', 'github'],
         embeddedWallets: {

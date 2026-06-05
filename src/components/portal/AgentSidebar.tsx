@@ -3,6 +3,7 @@ import { Send, Zap, Trash2, ArrowUpRight, Loader, X, Search } from 'lucide-react
 import { usePortalStore } from '../../store/usePortalStore';
 import { MANTLE_PROJECTS } from '../../lib/mantleProjects';
 import type { Project } from '../../lib/mantleProjects';
+import { ProjectLogo } from '../shared/ProjectLogo';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
@@ -369,13 +370,10 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
             >
               {/* Logo */}
               <div className="w-9 h-9 flex-shrink-0 rounded-xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-0.5">
-                <img
-                  src={`https://www.google.com/s2/favicons?sz=128&domain=${project.url.replace('https://', '').replace('http://', '').split('/')[0]}`}
-                  alt={project.name}
+                <ProjectLogo
+                  project={project}
                   className="w-full h-full object-contain rounded-lg"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="%230f172a"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="%2300e6b4" font-size="14" font-weight="bold">${project.name.charAt(0)}</text></svg>`;
-                  }}
+                  size={36}
                 />
               </div>
 

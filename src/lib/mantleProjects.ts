@@ -20,6 +20,7 @@ export interface Project {
   tokenAddress?: string;
   twitterHandle?: string;
   discordInvite?: string;
+  logoUrl?: string;
   color: string; // Tailwind gradient class
 }
 

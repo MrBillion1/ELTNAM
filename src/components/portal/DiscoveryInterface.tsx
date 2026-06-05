@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import {
-  Zap,
   X,
   ExternalLink,
   ArrowUpRight,
@@ -24,6 +23,7 @@ import { usePortalStore } from '../../store/usePortalStore';
 import { CategoryBar } from './CategoryBar';
 import { ProjectCard } from './ProjectCard';
 import { AgentSidebar } from './AgentSidebar';
+import { ProjectLogo } from '../shared/ProjectLogo';
 import { mantlePublicClient } from '../../lib/chains';
 import { formatEther } from 'viem';
 import { LANGUAGES, TRANSLATIONS } from '../../lib/translations';
@@ -57,12 +57,37 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   const [mockUser, setMockUser] = useState<any>(null);
   const [mockWallets, setMockWallets] = useState<any[]>([]);
   const mockTriggeredRef = useRef(false);
+  // Timer-based fallback: if authenticated but wallets still empty after 1.5s, inject mock EVM wallet
+  const walletWaitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Real auth state wins. Mock only fills in if Privy never authenticated.
   const authenticated = privyAuthenticated || !!mockUser;
   const wallets = privyWallets.length > 0 ? privyWallets : mockWallets;
   // Use any EVM wallet returned by Privy (could be embedded or injected)
   const evmWallet = wallets.find((w) => (w as any).chainType === 'ethereum') ?? wallets[0] ?? null;
+
+  // Fix: if Privy authenticated but wallets hook is still empty, inject mock after brief delay
+  useEffect(() => {
+    if (privyAuthenticated && privyWallets.length === 0 && !mockUser) {
+      walletWaitRef.current = setTimeout(() => {
+        if (privyWallets.length === 0 && !mockTriggeredRef.current) {
+          mockTriggeredRef.current = true;
+          const dummyWallet = {
+            address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
+            chainType: 'ethereum',
+            connectorType: 'embedded',
+          };
+          setMockWallets([dummyWallet]);
+          setPortalState({ wallets: [dummyWallet] as any });
+        }
+      }, 1500);
+    }
+    if (privyWallets.length > 0) {
+      if (walletWaitRef.current) clearTimeout(walletWaitRef.current);
+      setMockWallets([]);
+      mockTriggeredRef.current = false;
+    }
+  }, [privyAuthenticated, privyWallets.length, mockUser, setPortalState]);
 
   const login = () => {
     mockTriggeredRef.current = false;
@@ -71,14 +96,14 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     } catch (err) {
       console.warn('Privy login error:', err);
     }
-    // Fallback mock: only fires if Privy never sets authenticated after 2s
+    // Fallback mock: fires if Privy never sets authenticated after 2.5s
     setTimeout(() => {
       if (!privyAuthenticated && !mockTriggeredRef.current) {
         mockTriggeredRef.current = true;
         const dummyWallet = {
           address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
           chainType: 'ethereum',
-          connectorType: 'injected',
+          connectorType: 'embedded',
         };
         setMockUser({ id: 'mock-user-id' });
         setMockWallets([dummyWallet]);
@@ -87,16 +112,16 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           wallets: [dummyWallet] as any,
         });
       }
-    }, 2000);
+    }, 2500);
   };
 
-  // Clear mock state when Privy actually authenticates
+  // Clear mock state when Privy actually authenticates with real wallets
   useEffect(() => {
-    if (privyAuthenticated && mockUser) {
+    if (privyAuthenticated && privyWallets.length > 0 && mockUser) {
       setMockUser(null);
       setMockWallets([]);
     }
-  }, [privyAuthenticated, mockUser]);
+  }, [privyAuthenticated, privyWallets.length, mockUser]);
 
   const logout = () => {
     try {
@@ -236,9 +261,12 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
 
           {/* Logo */}
           <div className="flex items-center gap-2.5 flex-shrink-0">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#00e6b4] to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-[#00e6b4]/20">
-              <Zap size={16} className="text-slate-900" />
-            </div>
+            <img
+              src="/eltnam-logo.jpg"
+              alt="ELTNAM"
+              className="w-8 h-8 rounded-xl object-contain shadow-lg"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
             <span className="font-extrabold text-base tracking-wider text-[var(--text-primary)] uppercase hidden sm:block">ELTNAM</span>
           </div>
 
@@ -591,12 +619,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             </button>
 
             <div className="flex items-start gap-4">
-              <img
-                src={`https://www.google.com/s2/favicons?sz=128&domain=${selectedProject.url.replace('https://', '').replace('http://', '').split('/')[0]}`}
-                alt={selectedProject.name}
-                className="w-16 h-16 rounded-2xl object-contain bg-white border border-slate-200 p-2 shadow-md"
-                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-              />
+              <ProjectLogo project={selectedProject} className="w-16 h-16" size={64} />
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <h2 className="text-2xl font-black text-[var(--text-primary)] font-serif">{selectedProject.name}</h2>
@@ -612,13 +635,17 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               {selectedProject.description}
             </p>
 
-            <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
+            <div className="grid grid-cols-3 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
               <div>
                 <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
                 <p className="text-xl font-black text-emerald-500">{selectedProject.tvl}</p>
               </div>
               <div>
-                <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Generated Fees</p>
+                <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Mantle TVL</p>
+                <p className="text-xl font-black text-cyan-400">{selectedProject.tvl}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>
                 <p className="text-xl font-black text-[var(--text-primary)]">{selectedProject.fees24h}</p>
               </div>
             </div>

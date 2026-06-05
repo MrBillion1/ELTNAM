@@ -3,8 +3,10 @@ import type { Project } from '../../../lib/mantleProjects';
 
 export interface ProtocolData {
   tvl: string;
+  mantleTvl?: string;
   fees24h: string;
-  dataSource: 'DeFiLlama' | 'Dune' | 'TheGraph' | 'Nansen' | 'Mobula' | 'Messari' | 'Baseline';
+  logoUrl?: string;
+  dataSource: string;
   isStale: boolean;
   fetchedAt: number;
 }
@@ -18,7 +20,7 @@ const fetcher = async (url: string) => {
 
 export function useProtocolData(project: Project) {
   const { data, error, isLoading } = useSWR<ProtocolData>(
-    project.defillamaSlug ? `/api/protocol?slug=${project.defillamaSlug}&address=${project.tokenAddress || ''}` : null,
+    `/api/protocol?slug=${project.defillamaSlug || ''}&address=${project.tokenAddress || ''}&name=${encodeURIComponent(project.name)}&baseTvl=${encodeURIComponent(project.tvl)}&baseFees=${encodeURIComponent(project.fees24h)}`,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -26,6 +28,7 @@ export function useProtocolData(project: Project) {
       dedupingInterval: 60000, // 60s revalidation cache
       fallbackData: {
         tvl: project.tvl,
+        mantleTvl: project.tvl,
         fees24h: project.fees24h,
         dataSource: 'Baseline',
         isStale: true,
@@ -37,8 +40,9 @@ export function useProtocolData(project: Project) {
   return {
     data: data || {
       tvl: project.tvl,
+      mantleTvl: project.tvl,
       fees24h: project.fees24h,
-      dataSource: 'Baseline' as const,
+      dataSource: 'Baseline',
       isStale: true,
       fetchedAt: Date.now(),
     },
