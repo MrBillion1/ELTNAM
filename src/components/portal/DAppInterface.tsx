@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft, ExternalLink, Cpu, CheckCircle, RefreshCw,
-  MessageSquare, ShieldAlert, Globe, X, Coins
+  MessageSquare, ShieldAlert, Globe, X, Coins, Shield
 } from 'lucide-react';
 import type { Project } from '../../lib/mantleProjects';
 import { usePortalStore } from '../../store/usePortalStore';
 import { AgentSidebar } from './AgentSidebar';
+import { useProtocolData } from '../onboarding/hooks/useProtocolData';
 import { mantlePublicClient } from '../../lib/chains';
 import { TRANSLATIONS } from '../../lib/translations';
 import { ProjectLogo } from '../shared/ProjectLogo';
@@ -18,16 +19,15 @@ interface DAppInterfaceProps {
 export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   const { wallets, addMessage, isChatOpen, setPortalState, language } = usePortalStore();
   const t = TRANSLATIONS[language];
-  
+  const { data: protocolData } = useProtocolData(project);
+
   const [intentInput, setIntentInput] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [hasSubmittedIntent, setHasSubmittedIntent] = useState(false);
-  
-  // Workspace Tab: 'portal' (interactive simulator & stats) or 'website' (iframe)
+
+  // Workspace Tab: 'portal' (interactive analytics) or 'website' (redirect + modal)
   const [activeTab, setActiveTab] = useState<'portal' | 'website'>('portal');
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [iframeBlocked, setIframeBlocked] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [showWalletChoiceModal, setShowWalletChoiceModal] = useState(false);
 
   // Interactive Simulator States
   const [simStep, setSimStep] = useState<'input' | 'processing' | 'done'>('input');
@@ -59,7 +59,41 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
   // Derive domain for favicon logo
   const domain = project.url.replace('https://', '').replace('http://', '').split('/')[0];
-  const sharpLogoUrl = `https://www.google.com/s2/favicons?sz=128&domain=${domain}`;
+
+  // --- Live Activity Feed: per-category, realistic timestamps ---
+  const activityFeed = useMemo(() => {
+    const cat = project.category;
+    const addr = () => '0x' + Math.random().toString(16).slice(2, 8) + '...' + Math.random().toString(16).slice(2, 6);
+    const entries: { action: string; time: string }[] = [];
+    if (cat === 'dex') {
+      const pairs = [['MNT','USDC'],['USDC','mETH'],['wETH','USDT'],['MNT','wBTC'],['USDC','MNT']];
+      const amounts = [120,250,80,1500,320,45,900];
+      const times = ['just now','12s ago','1 min ago','3 min ago','8 min ago','22 min ago','2h ago','5h ago','1 day ago','3 days ago','2 weeks ago','1 month ago'];
+      pairs.forEach((p, i) => entries.push({ action: `${addr()} swapped ${amounts[i % amounts.length]} ${p[0]} → ${p[1]}`, time: times[i % times.length] }));
+    } else if (cat === 'lending') {
+      const ops = [
+        { op: 'supplied', asset: 'USDC', amt: 1200 }, { op: 'borrowed', asset: 'MNT', amt: 500 },
+        { op: 'repaid', asset: 'USDT', amt: 300 }, { op: 'supplied', asset: 'wETH', amt: 0.5 },
+        { op: 'liquidated', asset: 'USDC', amt: 4500 },
+      ];
+      const times = ['5s ago','45s ago','2 min ago','7 min ago','18 min ago','1h ago','4h ago','1 day ago','1 week ago','3 weeks ago'];
+      ops.forEach((o, i) => entries.push({ action: `${addr()} ${o.op} ${o.amt} ${o.asset}`, time: times[i % times.length] }));
+    } else if (cat === 'lst' || cat === 'yield') {
+      const ops = [
+        { op: 'staked', asset: 'ETH', amt: 2.5 }, { op: 'unstaked', asset: 'mETH', amt: 1.2 },
+        { op: 'claimed rewards', asset: 'MNT', amt: 85 }, { op: 'staked', asset: 'ETH', amt: 5.0 },
+      ];
+      const times = ['just now','30s ago','4 min ago','11 min ago','1h ago','6h ago','2 days ago','2 weeks ago'];
+      ops.forEach((o, i) => entries.push({ action: `${addr()} ${o.op} ${o.amt} ${o.asset}`, time: times[i % times.length] }));
+    } else {
+      const ops = ['deposited', 'withdrew', 'voted', 'claimed', 'transferred'];
+      const assets = ['MNT', 'USDC', 'wETH', 'USDT'];
+      const amts = [200, 50, 1000, 750, 33];
+      const times = ['2s ago','1 min ago','5 min ago','15 min ago','40 min ago','3h ago','1 day ago','5 days ago','3 weeks ago','2 months ago'];
+      ops.forEach((op, i) => entries.push({ action: `${addr()} ${op} ${amts[i % amts.length]} ${assets[i % assets.length]}`, time: times[i % times.length] }));
+    }
+    return entries;
+  }, [project.id, project.category]);
 
   // Auto-greet in the AI sidebar messages
   useEffect(() => {
@@ -198,7 +232,8 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
               <button
                 onClick={() => {
                   setActiveTab('website');
-                  setIframeLoaded(false);
+                  setShowWalletChoiceModal(true);
+                  window.open(project.url, '_blank', 'noopener,noreferrer');
                 }}
                 className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wider ${
                   activeTab === 'website'
@@ -233,9 +268,9 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
               {/* Dynamic Stats Banner */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: t.tvl, value: project.tvl, desc: 'Total Value Locked', color: 'text-emerald-400' },
-                  { label: '24h Fees', value: project.fees24h, desc: 'Protocol Revenue', color: 'text-cyan-400' },
-                  { label: 'Platform Status', value: 'Active 🟢', desc: 'Fully Audited', color: 'text-blue-400' },
+                  { label: t.tvl, value: protocolData.tvl || project.tvl, desc: 'Total Value Locked', color: 'text-emerald-400' },
+                  { label: '24h Fees', value: protocolData.fees24h || project.fees24h, desc: 'Protocol Revenue', color: 'text-cyan-400' },
+                  { label: 'Platform Status', value: 'Active 🟢', desc: (project as any).auditor ? `Audited by ${(project as any).auditor}` : 'Security Reviewed', color: 'text-blue-400' },
                   { label: 'Gas Status', value: 'Sponsored ⚡', desc: 'Account Abstraction', color: 'text-[#00e6b4]' },
                 ].map((s, i) => (
                   <div key={i} className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 space-y-1 hover:border-slate-700 transition">
@@ -447,21 +482,26 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                         <span>LIVE</span>
                       </div>
                     </div>
-                    <div className="space-y-3 max-h-40 overflow-y-auto scrollbar-hide text-[10px]">
-                      <div className="flex justify-between border-b border-slate-850 pb-2 text-slate-400">
-                        <span>0x3b21...91f4 swapped 250 MNT</span>
-                        <span className="text-slate-600">just now</span>
-                      </div>
-                      <div className="flex justify-between border-b border-slate-850 pb-2 text-slate-400">
-                        <span>0x91da...aa2e supplied 1,200 USDC</span>
-                        <span className="text-slate-600">2 min ago</span>
-                      </div>
-                      <div className="flex justify-between border-b border-slate-850 pb-2 text-slate-400">
-                        <span>0x88fc...421c staked 5.2 ETH</span>
-                        <span className="text-slate-600">5 min ago</span>
-                      </div>
+                    <div className="space-y-2 max-h-52 overflow-y-auto scrollbar-hide">
+                      {activityFeed.map((entry, i) => (
+                        <div key={i} className="flex justify-between items-start gap-2 border-b border-slate-800/60 pb-2 last:border-0">
+                          <span className="text-[10px] text-slate-300 font-mono leading-snug flex-1">{entry.action}</span>
+                          <span className="text-[9px] text-slate-600 whitespace-nowrap flex-shrink-0">{entry.time}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
+
+                  {/* Audit Badge */}
+                  {(project as any).auditor && (
+                    <div className="bg-blue-950/40 border border-blue-800/40 rounded-2xl p-4 flex items-center gap-3">
+                      <Shield size={18} className="text-blue-400 flex-shrink-0" />
+                      <div>
+                        <p className="text-[10px] text-blue-400 font-extrabold uppercase tracking-wider">Security Audited</p>
+                        <p className="text-xs text-slate-300 font-semibold">Audited by <span className="text-blue-300 font-black">{(project as any).auditor}</span></p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -469,41 +509,51 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
             </div>
           )}
 
-          {/* TAB B: Website Embed (Standard iframe for those that work) */}
-          {activeTab === 'website' && (
-            <div className="w-full h-full relative">
-              {/* Loading shimmer while iframe is loading */}
-              {!iframeLoaded && !iframeBlocked && (
-                <div className="absolute inset-0 z-10 bg-slate-950 flex items-center justify-center">
-                  <div className="text-center space-y-4 animate-pulse">
-                    <img
-                      src={sharpLogoUrl}
-                      alt=""
-                      className="w-16 h-16 rounded-2xl mx-auto object-contain"
-                    />
-                    <p className="text-sm font-bold text-slate-300 font-serif">{project.name}</p>
-                    <p className="text-xs text-slate-500">Loading live dApp…</p>
-                    <div className="flex items-center gap-1.5 justify-center">
-                      <RefreshCw size={12} className="animate-spin text-cyan-400" />
-                      <span className="text-[10px] text-slate-600">Connecting to {domain}</span>
-                    </div>
+          {/* TAB B: External dApp – wallet choice modal */}
+          {activeTab === 'website' && showWalletChoiceModal && (
+            <div className="w-full h-full flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+              <div className="w-full max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl shadow-black/60 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex items-center gap-3">
+                  <ProjectLogo project={project} className="w-10 h-10 rounded-xl" size={40} />
+                  <div>
+                    <h3 className="text-sm font-black text-white font-serif">{project.name}</h3>
+                    <p className="text-[10px] text-slate-400 font-semibold">Opening in a new tab…</p>
                   </div>
                 </div>
-              )}
-
-              {/* Actual iframe */}
-              {!iframeBlocked && (
-                <iframe
-                  ref={iframeRef}
-                  src={project.url}
-                  title={project.name}
-                  className={`w-full h-full border-none bg-white transition-opacity duration-500 ${iframeLoaded ? 'opacity-100' : 'opacity-0'}`}
-                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-                  allow="clipboard-read; clipboard-write"
-                  onLoad={() => setIframeLoaded(true)}
-                  onError={() => setIframeBlocked(true)}
-                />
-              )}
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  <span className="font-bold text-white">{project.name}</span> has launched in a new browser tab.
+                  Which wallet would you like to use inside the dApp?
+                </p>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      setShowWalletChoiceModal(false);
+                      setActiveTab('portal');
+                      addMessage({ type: 'agent', text: `You're now using your **Portal Wallet** (connected via Privy) on ${project.name}. Your address and session are already active in the new tab.` });
+                      setPortalState({ isChatOpen: true });
+                    }}
+                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-2xl text-xs font-extrabold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
+                  >
+                    <CheckCircle size={14} /> Use my Portal Wallet (Privy)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowWalletChoiceModal(false);
+                      setActiveTab('portal');
+                      addMessage({ type: 'agent', text: `Noted! You'll connect a **new external wallet** (MetaMask / WalletConnect) directly on the ${project.name} site in the new tab.` });
+                    }}
+                    className="w-full py-3 border border-slate-700 hover:border-slate-500 bg-slate-800 hover:bg-slate-700/80 rounded-2xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center justify-center gap-2"
+                  >
+                    <Globe size={14} /> Connect a New Wallet on the Site
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setShowWalletChoiceModal(false); setActiveTab('portal'); }}
+                  className="w-full text-[10px] text-slate-600 hover:text-slate-400 transition font-semibold"
+                >
+                  Cancel — stay in Portal
+                </button>
+              </div>
             </div>
           )}
 

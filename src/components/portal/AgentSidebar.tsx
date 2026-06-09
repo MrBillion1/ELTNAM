@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Zap, Trash2, ArrowUpRight, Loader, X, Search } from 'lucide-react';
+import { Send, Trash2, ArrowUpRight, Loader, X, Search } from 'lucide-react';
 import { usePortalStore } from '../../store/usePortalStore';
 import { MANTLE_PROJECTS } from '../../lib/mantleProjects';
 import type { Project } from '../../lib/mantleProjects';
@@ -222,9 +222,12 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
       {/* Header */}
       <div className="p-5 border-b border-[var(--border-primary)] flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-lg flex items-center justify-center shadow-md">
-            <Zap size={14} className="text-white" />
-          </div>
+          <img
+            src="/eltnam-logo.png"
+            alt="ELTNAM"
+            className="w-7 h-7 rounded-full object-contain shadow-md border border-[var(--border-primary)]"
+            onError={(e) => { (e.target as HTMLImageElement).src = '/eltnam-logo.jpg'; }}
+          />
           <div>
             <h2 className="text-sm font-black text-[var(--text-primary)] uppercase tracking-wider">Ask AI</h2>
             <p className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">ELTNAM Copilot</p>
@@ -233,13 +236,11 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
         <div className="flex items-center gap-2">
           {activeInterface === 'dapp' && (
             <button
-              onClick={() => {
-                setPortalState({ activeInterface: 'discovery', selectedProject: null });
-              }}
-              title="Return to Discovery"
+              onClick={() => setPortalState({ isChatOpen: false })}
+              title="Close Copilot Panel"
               className="mr-1.5 px-2.5 py-1 text-[10px] font-black rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-[var(--text-secondary)] hover:bg-[var(--card-hover-bg)] transition flex items-center gap-1 uppercase tracking-wider"
             >
-              <span>← Return</span>
+              <span>✕ Close</span>
             </button>
           )}
           <button

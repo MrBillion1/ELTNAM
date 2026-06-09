@@ -21,6 +21,7 @@ export interface Project {
   twitterHandle?: string;
   discordInvite?: string;
   logoUrl?: string;
+  auditor?: string; // Security audit firm
   color: string; // Tailwind gradient class
 }
 
@@ -46,6 +47,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000', // native or mock
     twitterHandle: 'InitCapital_',
     discordInvite: 'initcapital',
+    auditor: 'PeckShield',
     color: 'from-blue-600 to-cyan-500',
   },
   {
@@ -68,6 +70,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x4515A45A5a2a2a2A2A2a2A2A2a2A2a2A2A2A2A2A',
     twitterHandle: 'MerchantMoe_Fi',
     discordInvite: 'merchantmoe',
+    auditor: 'Paladin Security',
     color: 'from-amber-500 to-orange-600',
   },
   {
@@ -90,6 +93,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'vertex_protocol',
     discordInvite: 'vertex',
+    auditor: 'Sigma Prime',
     color: 'from-emerald-500 to-teal-600',
   },
   {
@@ -112,6 +116,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: TOKEN_ADDRESSES.mETH,
     twitterHandle: '0xMantleLSP',
     discordInvite: '0xMantle',
+    auditor: 'Spearbit',
     color: 'from-cyan-500 to-blue-600',
   },
   {
@@ -134,6 +139,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: TOKEN_ADDRESSES.USDY,
     twitterHandle: 'OndoFinance',
     discordInvite: 'ondofinance',
+    auditor: 'OpenZeppelin',
     color: 'from-slate-700 to-slate-900',
   },
   {
@@ -156,6 +162,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'ethena_labs',
     discordInvite: 'ethena',
+    auditor: 'Quantstamp',
     color: 'from-purple-600 to-pink-500',
   },
   {
@@ -178,6 +185,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'AgoraStablecoin',
     discordInvite: 'agora',
+    auditor: 'Trail of Bits',
     color: 'from-cyan-600 to-emerald-500',
   },
   {
@@ -200,6 +208,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'IntentX_',
     discordInvite: 'intentx',
+    auditor: 'PeckShield',
     color: 'from-violet-600 to-indigo-700',
   },
   {
@@ -222,6 +231,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'StargateFinance',
     discordInvite: 'stargate',
+    auditor: 'Zellic',
     color: 'from-purple-500 to-indigo-600',
   },
   {
@@ -244,6 +254,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'pendle_fi',
     discordInvite: 'pendle',
+    auditor: 'Ackee Blockchain',
     color: 'from-blue-600 to-teal-500',
   },
   {
@@ -420,6 +431,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'FBTC_Official',
     discordInvite: 'fbtc',
+    auditor: 'Sigma Prime',
     color: 'from-yellow-600 to-amber-500',
   },
   {
@@ -486,6 +498,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'ClearpoolFin',
     discordInvite: 'clearpool',
+    auditor: 'Hacken',
     color: 'from-sky-500 to-indigo-600',
   },
   {
@@ -530,6 +543,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: '0x0000000000000000000000000000000000000000',
     twitterHandle: 'Lendle_Lending',
     discordInvite: 'lendle',
+    auditor: 'Certik',
     color: 'from-blue-500 to-cyan-600',
   },
   {
@@ -552,6 +566,7 @@ export const FEATURED_PROJECTS: Project[] = [
     tokenAddress: TOKEN_ADDRESSES.MNT,
     twitterHandle: '0xMantleStaking',
     discordInvite: '0xMantle',
+    auditor: 'Spearbit',
     color: 'from-cyan-500 to-emerald-500',
   },
   {

@@ -170,9 +170,9 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     return filteredProjects.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredProjects, currentPage]);
 
-  // --- Chain stats ---
+  // --- Chain stats (on-chain: block + gas) ---
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchOnChainStats = async () => {
       try {
         const [blockNum, gas] = await Promise.all([
           mantlePublicClient.getBlockNumber(),
@@ -190,8 +190,34 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         console.warn('[ELTNAM] Failed to fetch real-time chain stats:', e);
       }
     };
-    fetchStats();
-    const interval = setInterval(fetchStats, 10000);
+    fetchOnChainStats();
+    const interval = setInterval(fetchOnChainStats, 10000);
+    return () => clearInterval(interval);
+  }, [setPortalState]);
+
+  // --- Real TVL from /api/chain-stats (DeFiLlama) ---
+  useEffect(() => {
+    const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+    const fetchTvl = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/chain-stats`);
+        if (!res.ok) return;
+        const d = await res.json();
+        setPortalState({
+          chainStats: {
+            ...usePortalStore.getState().chainStats,
+            tvl: d.ecosystemTvl || chainStats.tvl,
+            tvlChange: d.ecosystemTvlChange || chainStats.tvlChange,
+            chainTvl: d.chainTvl || chainStats.chainTvl,
+            chainTvlChange: d.chainTvlChange || chainStats.chainTvlChange,
+          }
+        });
+      } catch (e) {
+        console.warn('[ELTNAM] /api/chain-stats error:', e);
+      }
+    };
+    fetchTvl();
+    const interval = setInterval(fetchTvl, 60000);
     return () => clearInterval(interval);
   }, [setPortalState]);
 
@@ -262,10 +288,10 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           {/* Logo */}
           <div className="flex items-center gap-2.5 flex-shrink-0">
             <img
-              src="/eltnam-logo.jpg"
+              src="/eltnam-logo.png"
               alt="ELTNAM"
-              className="w-8 h-8 rounded-xl object-contain shadow-lg"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              className="w-8 h-8 rounded-full object-contain shadow-lg border border-[var(--border-primary)]"
+              onError={(e) => { (e.target as HTMLImageElement).src = '/eltnam-logo.jpg'; }}
             />
             <span className="font-extrabold text-base tracking-wider text-[var(--text-primary)] uppercase hidden sm:block">ELTNAM</span>
           </div>
@@ -499,7 +525,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         {/* ── Explore Section Header — Search + Category bar ── */}
         <div className="px-4 md:px-6 pt-2 pb-0">
           <div className="flex items-center justify-between gap-4 mb-4">
-            {/* "Explore" label + Search (Mantle-style: left side) */}
+            {/* "Explore" label + Search */}
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <h2 className="text-xl font-extrabold text-[var(--text-primary)] flex-shrink-0 hidden sm:block">Explore</h2>
               <div className="relative flex-1 max-w-xs">
@@ -515,21 +541,9 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             </div>
 
             {/* Result count (right side) */}
-            <div className="flex-shrink-0 text-[11px] text-[var(--text-secondary)] font-bold hidden sm:block">
+            <div className="flex-shrink-0 text-[11px] text-[var(--text-secondary)] font-bold">
               {filteredProjects.length} dApp{filteredProjects.length !== 1 ? 's' : ''}
             </div>
-          </div>
-
-          {/* Mobile search (shown separately on small screens) */}
-          <div className="sm:hidden mb-3 relative">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" />
-            <input
-              type="text"
-              placeholder={t.searchPlaceholder}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/20 theme-transition"
-            />
           </div>
 
           {/* Category pills */}
@@ -635,14 +649,10 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               {selectedProject.description}
             </p>
 
-            <div className="grid grid-cols-3 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
+            <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
               <div>
                 <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
                 <p className="text-xl font-black text-emerald-500">{selectedProject.tvl}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">Mantle TVL</p>
-                <p className="text-xl font-black text-cyan-400">{selectedProject.tvl}</p>
               </div>
               <div>
                 <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>
