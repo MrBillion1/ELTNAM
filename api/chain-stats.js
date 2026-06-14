@@ -12,26 +12,33 @@ function formatValue(val) {
 }
 
 async function fetchChainFees24h() {
-  // DeFiLlama fees summary for the Mantle chain (chain-level aggregation)
+  // DeFiLlama fees summary overview for Mantle protocols
   try {
-    const res = await fetch(`https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees`);
+    const res = await fetch(`https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=false&dataType=dailyFees`);
     if (res.ok) {
       const data = await res.json().catch(() => null);
-      if (data) {
-        // total24h is chain-wide 24h fees aggregated across all protocols on Mantle
-        if (typeof data.total24h === 'number' && data.total24h > 0) {
-          return formatValue(data.total24h);
+      if (data && Array.isArray(data.protocols)) {
+        let totalMantleFees = 0;
+        for (const proto of data.protocols) {
+          if (proto.breakdown24h) {
+            // Find Mantle case-insensitively in the breakdown
+            const mantleKey = Object.keys(proto.breakdown24h).find(k => k.toLowerCase() === 'mantle');
+            if (mantleKey && typeof proto.breakdown24h[mantleKey] === 'number') {
+              totalMantleFees += proto.breakdown24h[mantleKey];
+            }
+          } else if (typeof proto.total24h === 'number') {
+            // Fallback for native/single-chain Mantle protocols
+            const chains = proto.chains || [];
+            const isMantleOnly = chains.length === 1 && chains[0].toLowerCase() === 'mantle';
+            if (isMantleOnly) {
+              totalMantleFees += proto.total24h;
+            }
+          }
+        }
+        if (totalMantleFees > 0) {
+          return formatValue(totalMantleFees);
         }
       }
-    }
-  } catch (_) { /* fall through */ }
-
-  // Fallback: try the chain summary endpoint
-  try {
-    const res = await fetch(`https://api.llama.fi/summary/fees/${MANTLE_SLUG}?dataType=dailyFees`);
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      if (data?.total24h > 0) return formatValue(data.total24h);
     }
   } catch (_) { /* fall through */ }
 

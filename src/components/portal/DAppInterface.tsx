@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
 import {
   ArrowLeft, ExternalLink, Cpu, CheckCircle, RefreshCw,
   MessageSquare, ShieldAlert, Globe, X, Coins, Shield
@@ -18,6 +19,7 @@ interface DAppInterfaceProps {
 
 export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   const { wallets, addMessage, isChatOpen, setPortalState, language } = usePortalStore();
+  const { connectWallet } = usePrivy();
   const t = TRANSLATIONS[language];
   const { data: protocolData } = useProtocolData(project);
 
@@ -26,7 +28,8 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   const [hasSubmittedIntent, setHasSubmittedIntent] = useState(false);
 
   // Workspace Tab: 'portal' (interactive analytics) or 'website' (redirect + modal)
-  const [activeTab, setActiveTab] = useState<'portal' | 'website'>('portal');
+  // Default to 'website' to show real-time project UI immediately inside the ELTNAM website
+  const [activeTab, setActiveTab] = useState<'portal' | 'website'>('website');
   const [showWalletChoice, setShowWalletChoice] = useState(true);
 
   useEffect(() => {
@@ -651,14 +654,23 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                         <button
                           onClick={() => {
                             setShowWalletChoice(false);
-                            addMessage({
-                              type: 'agent',
-                              text: `Noted! Initiated a new external wallet connection. Open the MetaMask or WalletConnect extension inside the launched ${project.name} browser tab to complete approval setup.`
-                            });
+                            try {
+                              connectWallet();
+                              addMessage({
+                                type: 'agent',
+                                text: `Triggered external wallet connection flow via Privy infrastructure. Please complete the setup in the connection modal.`
+                              });
+                            } catch (err) {
+                              console.warn('Privy connectWallet failed:', err);
+                              addMessage({
+                                type: 'agent',
+                                text: `Initiated connection fallback. Please open your MetaMask or WalletConnect extension directly to authorize.`
+                              });
+                            }
                           }}
                           className="w-full py-3 border border-slate-700 hover:border-slate-500 bg-slate-800 hover:bg-slate-750 rounded-2xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
                         >
-                          <Globe size={14} /> Option 2: Connect a New Wallet on the Site
+                          <Globe size={14} /> Option 2: Connect a New Wallet via Privy
                         </button>
                       </div>
 
