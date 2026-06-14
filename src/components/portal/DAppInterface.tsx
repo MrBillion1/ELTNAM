@@ -43,6 +43,43 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   const [stakeAmount, setStakeAmount] = useState('');
   const [stakedBalance, setStakedBalance] = useState('0.00');
 
+  const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({
+    MNT: 0.55,
+    USDC: 1.0,
+    mETH: 1661.43,
+    ETH: 1661.43,
+    USDT: 1.0,
+  });
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        const res = await fetch('https://coins.llama.fi/prices/current/coingecko:mantle,coingecko:ethereum,coingecko:usd-coin,coingecko:tether');
+        if (!res.ok) return;
+        const data = await res.json();
+        const coins = data.coins || {};
+        
+        const mntPrice = coins['coingecko:mantle']?.price || 0.55;
+        const ethPrice = coins['coingecko:ethereum']?.price || 1661.43;
+        const usdcPrice = coins['coingecko:usd-coin']?.price || 1.0;
+        const usdtPrice = coins['coingecko:tether']?.price || 1.0;
+
+        setTokenPrices({
+          MNT: mntPrice,
+          USDC: usdcPrice,
+          mETH: ethPrice,
+          ETH: ethPrice,
+          USDT: usdtPrice,
+        });
+      } catch (e) {
+        console.warn('[ELTNAM] Failed to fetch real-time token prices:', e);
+      }
+    };
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Fetch balance on mount (used for future display)
   useEffect(() => {
     const fetchBalance = async () => {
@@ -153,9 +190,12 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
       
       // Update balances locally to feel alive
       if (project.category === 'dex') {
+        const fromPrice = tokenPrices[swapFrom] || 1;
+        const toPrice = tokenPrices[swapTo] || 1;
+        const receiveEst = (Number(swapAmount) * fromPrice / toPrice).toFixed(2);
         addMessage({
           type: 'agent',
-          text: `Successfully swapped **${swapAmount} ${swapFrom}** for **${(Number(swapAmount) * 1.05).toFixed(2)} ${swapTo}** on ${project.name}!`
+          text: `Successfully swapped **${swapAmount} ${swapFrom}** for **${receiveEst} ${swapTo}** on ${project.name}!`
         });
       } else if (project.category === 'lending') {
         setSuppliedBalance((prev) => (Number(prev) + Number(supplyAmount)).toFixed(2));
@@ -331,7 +371,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                               <label className="text-[8px] text-slate-500 font-bold uppercase">Receive Amount (Estimated)</label>
                               <div className="flex justify-between items-center">
                                 <span className="text-lg font-black text-slate-400">
-                                  {swapAmount ? (Number(swapAmount) * 1.05).toFixed(2) : '0.00'}
+                                  {swapAmount ? (Number(swapAmount) * (tokenPrices[swapFrom] || 1) / (tokenPrices[swapTo] || 1)).toFixed(2) : '0.00'}
                                 </span>
                                 <select
                                   value={swapTo}
