@@ -596,9 +596,8 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             </div>
 
             {/* Live stats */}
-            <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 min-w-[280px] xl:max-w-3xl">
+            <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-4 gap-2.5 min-w-[280px] xl:max-w-2xl">
               {[
-                { label: t.ecosystemTvl, value: chainStats.tvl, desc: chainStats.tvlChange, color: 'text-emerald-600 dark:text-emerald-400' },
                 { label: t.tvl, value: chainStats.chainTvl, desc: chainStats.chainTvlChange, color: 'text-cyan-600 dark:text-cyan-400' },
                 { label: t.latestBlock, value: chainStats.blockNumber, desc: 'Mantle Mainnet', color: 'text-blue-600 dark:text-blue-400' },
                 { label: t.gasPrice, value: chainStats.gasPrice, desc: 'Ultra-low cost', color: 'text-[#00b38c] dark:text-[#00e6b4]' },

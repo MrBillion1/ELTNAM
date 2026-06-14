@@ -668,7 +668,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
       {/* ── Right Panel: Agent Sidebar (slides in after intent) ─────── */}
       <div
         className={`transition-all duration-500 ease-in-out border-l border-slate-800/80 flex-shrink-0 h-full overflow-hidden ${
-          hasSubmittedIntent || isChatOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0 border-none'
+          isChatOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0 border-none'
         }`}
       >
         <div className="w-[420px] h-full">
