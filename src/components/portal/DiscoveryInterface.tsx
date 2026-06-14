@@ -287,25 +287,73 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     return () => clearInterval(interval);
   }, [setPortalState]);
 
-  // --- Real TVL from /api/chain-stats (DeFiLlama) ---
+  // --- Real TVL from /api/chain-stats (DeFiLlama) with public API fallback ---
   useEffect(() => {
     const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
     const fetchTvl = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/chain-stats`);
-        if (!res.ok) return;
-        const d = await res.json();
-        setPortalState({
-          chainStats: {
-            ...usePortalStore.getState().chainStats,
-            tvl: d.ecosystemTvl || chainStats.tvl,
-            tvlChange: d.ecosystemTvlChange || chainStats.tvlChange,
-            chainTvl: d.chainTvl || chainStats.chainTvl,
-            chainTvlChange: d.chainTvlChange || chainStats.chainTvlChange,
+        let chainTvl = '';
+        let chainTvlChange = '';
+        let ecosystemTvl = '';
+        let ecosystemTvlChange = '';
+        let success = false;
+
+        try {
+          const res = await fetch(`${API_BASE}/api/chain-stats`);
+          if (res.ok) {
+            const d = await res.json();
+            chainTvl = d.chainTvl;
+            chainTvlChange = d.chainTvlChange;
+            ecosystemTvl = d.ecosystemTvl;
+            ecosystemTvlChange = d.ecosystemTvlChange;
+            success = true;
           }
-        });
+        } catch {
+          // Ignore backend fetch error and try direct DeFiLlama fetch
+        }
+
+        if (!success) {
+          // Direct fetch from DeFiLlama public endpoints
+          const histRes = await fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle');
+          if (histRes.ok) {
+            const hist = await histRes.json();
+            if (Array.isArray(hist) && hist.length >= 2) {
+              const latest = hist[hist.length - 1];
+              const prev = hist[hist.length - 2];
+              const latestTvl = latest ? latest.tvl : 0;
+              const prevTvl = prev ? prev.tvl : latestTvl;
+              const changePct = prevTvl ? ((latestTvl - prevTvl) / prevTvl * 100).toFixed(2) : '0.00';
+              
+              const formatTvl = (val: number) => {
+                return val >= 1e9
+                  ? `$${(val / 1e9).toFixed(2)}B`
+                  : val >= 1e6
+                    ? `$${(val / 1e6).toFixed(1)}M`
+                    : `$${Math.round(val).toLocaleString()}`;
+              };
+
+              chainTvl = formatTvl(latestTvl);
+              chainTvlChange = `${parseFloat(changePct) >= 0 ? '+' : ''}${changePct}%`;
+              ecosystemTvl = chainTvl;
+              ecosystemTvlChange = chainTvlChange;
+              success = true;
+            }
+          }
+        }
+
+        if (success) {
+          setPortalState({
+            chainStats: {
+              ...usePortalStore.getState().chainStats,
+              tvl: ecosystemTvl || usePortalStore.getState().chainStats.tvl,
+              tvlChange: ecosystemTvlChange || usePortalStore.getState().chainStats.tvlChange,
+              chainTvl: chainTvl || usePortalStore.getState().chainStats.chainTvl,
+              chainTvlChange: chainTvlChange || usePortalStore.getState().chainStats.chainTvlChange,
+            }
+          });
+        }
       } catch (e) {
-        console.warn('[ELTNAM] /api/chain-stats error:', e);
+        console.warn('[ELTNAM] Failed to fetch real-time chain stats:', e);
       }
     };
     fetchTvl();
