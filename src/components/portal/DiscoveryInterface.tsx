@@ -24,6 +24,7 @@ import { CategoryBar } from './CategoryBar';
 import { ProjectCard } from './ProjectCard';
 import { AgentSidebar } from './AgentSidebar';
 import { ProjectLogo } from '../shared/ProjectLogo';
+import { useProtocolData } from '../onboarding/hooks/useProtocolData';
 import { mantlePublicClient } from '../../lib/chains';
 import { formatEther } from 'viem';
 import { LANGUAGES, TRANSLATIONS } from '../../lib/translations';
@@ -33,6 +34,97 @@ interface DiscoveryInterfaceProps {
 }
 
 const ITEMS_PER_PAGE = 12;
+
+interface ProjectDetailModalProps {
+  project: Project;
+  onClose: () => void;
+  onProceedToDApp: (project: Project) => void;
+}
+
+function ProjectDetailModal({ project, onClose, onProceedToDApp }: ProjectDetailModalProps) {
+  const { data } = useProtocolData(project);
+  const { setPortalState, language } = usePortalStore();
+  const t = TRANSLATIONS[language];
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center animate-in">
+      <div className="w-full max-w-2xl bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] rounded-t-3xl p-6 md:p-8 space-y-6 shadow-2xl relative animate-in slide-in-from-bottom-5 duration-300">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 p-2 hover:bg-[var(--border-primary)] rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="flex items-start gap-4">
+          <ProjectLogo project={project} className="w-16 h-16" size={64} />
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-black text-[var(--text-primary)] font-serif">{project.name}</h2>
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full border bg-blue-500/10 border-blue-500/30 text-blue-300 uppercase tracking-wider font-bold">
+                {project.status}
+              </span>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] font-semibold uppercase tracking-wider">{project.category}</p>
+          </div>
+        </div>
+
+        <p className="text-sm text-[var(--text-primary)] leading-relaxed font-semibold">
+          {project.description}
+        </p>
+
+        <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
+          <div>
+            <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
+            <p className="text-xl font-black text-emerald-500">{data.tvl}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>
+            <p className="text-xl font-black text-[var(--text-primary)]">{data.fees24h}</p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.quickActions}</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {project.actions.map((act) => (
+              <button
+                key={act}
+                onClick={() =>
+                  setPortalState({
+                    selectedProject: null,
+                    isChatOpen: true,
+                    chatInputQueue: `I want to ${act.toLowerCase()} on ${project.name}`,
+                  })
+                }
+                className="p-3 bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--accent-color)] text-xs rounded-xl hover:-translate-y-0.5 transition text-[var(--text-primary)] font-semibold flex items-center justify-between text-left group"
+              >
+                <span>{act}</span>
+                <ArrowUpRight size={12} className="text-slate-500 group-hover:text-cyan-400 transition" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            onClick={() => onProceedToDApp(project)}
+            className="flex-1 py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-blue-500/20 flex items-center justify-center gap-1.5"
+          >
+            <span>{t.launchDApp}</span>
+            <ExternalLink size={14} />
+          </button>
+          <button
+            onClick={onClose}
+            className="px-6 py-3.5 border border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl text-xs font-bold transition"
+          >
+            {t.close}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps) {
   const {
@@ -623,82 +715,11 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
 
       {/* Project Detail Panel */}
       {selectedProject && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center animate-in">
-          <div className="w-full max-w-2xl bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] rounded-t-3xl p-6 md:p-8 space-y-6 shadow-2xl relative">
-            <button
-              onClick={() => setPortalState({ selectedProject: null })}
-              className="absolute right-4 top-4 p-2 hover:bg-[var(--border-primary)] rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="flex items-start gap-4">
-              <ProjectLogo project={selectedProject} className="w-16 h-16" size={64} />
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-black text-[var(--text-primary)] font-serif">{selectedProject.name}</h2>
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full border bg-blue-500/10 border-blue-500/30 text-blue-300 uppercase tracking-wider font-bold">
-                    {selectedProject.status}
-                  </span>
-                </div>
-                <p className="text-xs text-[var(--text-secondary)] font-semibold uppercase tracking-wider">{selectedProject.category}</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-[var(--text-primary)] leading-relaxed font-semibold">
-              {selectedProject.description}
-            </p>
-
-            <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
-              <div>
-                <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
-                <p className="text-xl font-black text-emerald-500">{selectedProject.tvl}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>
-                <p className="text-xl font-black text-[var(--text-primary)]">{selectedProject.fees24h}</p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.quickActions}</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {selectedProject.actions.map((act) => (
-                  <button
-                    key={act}
-                    onClick={() =>
-                      setPortalState({
-                        selectedProject: null,
-                        isChatOpen: true,
-                        chatInputQueue: `I want to ${act.toLowerCase()} on ${selectedProject.name}`,
-                      })
-                    }
-                    className="p-3 bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--accent-color)] text-xs rounded-xl hover:-translate-y-0.5 transition text-[var(--text-primary)] font-semibold flex items-center justify-between text-left group"
-                  >
-                    <span>{act}</span>
-                    <ArrowUpRight size={12} className="text-slate-500 group-hover:text-cyan-400 transition" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => onProceedToDApp(selectedProject)}
-                className="flex-1 py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-blue-500/20 flex items-center justify-center gap-1.5"
-              >
-                <span>{t.launchDApp}</span>
-                <ExternalLink size={14} />
-              </button>
-              <button
-                onClick={() => setPortalState({ selectedProject: null })}
-                className="px-6 py-3.5 border border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xl text-xs font-bold transition"
-              >
-                {t.close}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ProjectDetailModal
+          project={selectedProject}
+          onClose={() => setPortalState({ selectedProject: null })}
+          onProceedToDApp={onProceedToDApp}
+        />
       )}
     </div>
   );

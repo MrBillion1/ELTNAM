@@ -12,13 +12,13 @@ async function fetchLlamaData(slug) {
       ? await tvlRes.value.text()
       : null;
     const tvl = tvlText
-      ? `$${parseFloat(tvlText).toLocaleString()}`
+      ? `$${parseFloat(tvlText).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
       : null;
 
     let fees24h = 'N/A';
     if (feesRes.status === 'fulfilled' && feesRes.value.ok) {
       const fj = await feesRes.value.json().catch(() => null);
-      if (fj?.total24h) fees24h = `$${parseFloat(fj.total24h).toLocaleString()}`;
+      if (fj?.total24h) fees24h = `$${parseFloat(fj.total24h).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
     }
 
     return tvl ? { tvl, fees24h, dataSource: 'DeFiLlama', isStale: false, fetchedAt: Date.now() } : null;

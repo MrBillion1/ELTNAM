@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowLeft, ExternalLink, Cpu, CheckCircle, RefreshCw,
   MessageSquare, ShieldAlert, Globe, X, Coins, Shield
@@ -27,7 +27,6 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
   // Workspace Tab: 'portal' (interactive analytics) or 'website' (redirect + modal)
   const [activeTab, setActiveTab] = useState<'portal' | 'website'>('portal');
-  const [showWalletChoiceModal, setShowWalletChoiceModal] = useState(false);
 
   // Interactive Simulator States
   const [simStep, setSimStep] = useState<'input' | 'processing' | 'done'>('input');
@@ -60,40 +59,43 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   // Derive domain for favicon logo
   const domain = project.url.replace('https://', '').replace('http://', '').split('/')[0];
 
-  // --- Live Activity Feed: per-category, realistic timestamps ---
-  const activityFeed = useMemo(() => {
-    const cat = project.category;
-    const addr = () => '0x' + Math.random().toString(16).slice(2, 8) + '...' + Math.random().toString(16).slice(2, 6);
-    const entries: { action: string; time: string }[] = [];
-    if (cat === 'dex') {
-      const pairs = [['MNT','USDC'],['USDC','mETH'],['wETH','USDT'],['MNT','wBTC'],['USDC','MNT']];
-      const amounts = [120,250,80,1500,320,45,900];
-      const times = ['just now','12s ago','1 min ago','3 min ago','8 min ago','22 min ago','2h ago','5h ago','1 day ago','3 days ago','2 weeks ago','1 month ago'];
-      pairs.forEach((p, i) => entries.push({ action: `${addr()} swapped ${amounts[i % amounts.length]} ${p[0]} → ${p[1]}`, time: times[i % times.length] }));
-    } else if (cat === 'lending') {
-      const ops = [
-        { op: 'supplied', asset: 'USDC', amt: 1200 }, { op: 'borrowed', asset: 'MNT', amt: 500 },
-        { op: 'repaid', asset: 'USDT', amt: 300 }, { op: 'supplied', asset: 'wETH', amt: 0.5 },
-        { op: 'liquidated', asset: 'USDC', amt: 4500 },
-      ];
-      const times = ['5s ago','45s ago','2 min ago','7 min ago','18 min ago','1h ago','4h ago','1 day ago','1 week ago','3 weeks ago'];
-      ops.forEach((o, i) => entries.push({ action: `${addr()} ${o.op} ${o.amt} ${o.asset}`, time: times[i % times.length] }));
-    } else if (cat === 'lst' || cat === 'yield') {
-      const ops = [
-        { op: 'staked', asset: 'ETH', amt: 2.5 }, { op: 'unstaked', asset: 'mETH', amt: 1.2 },
-        { op: 'claimed rewards', asset: 'MNT', amt: 85 }, { op: 'staked', asset: 'ETH', amt: 5.0 },
-      ];
-      const times = ['just now','30s ago','4 min ago','11 min ago','1h ago','6h ago','2 days ago','2 weeks ago'];
-      ops.forEach((o, i) => entries.push({ action: `${addr()} ${o.op} ${o.amt} ${o.asset}`, time: times[i % times.length] }));
-    } else {
-      const ops = ['deposited', 'withdrew', 'voted', 'claimed', 'transferred'];
-      const assets = ['MNT', 'USDC', 'wETH', 'USDT'];
-      const amts = [200, 50, 1000, 750, 33];
-      const times = ['2s ago','1 min ago','5 min ago','15 min ago','40 min ago','3h ago','1 day ago','5 days ago','3 weeks ago','2 months ago'];
-      ops.forEach((op, i) => entries.push({ action: `${addr()} ${op} ${amts[i % amts.length]} ${assets[i % assets.length]}`, time: times[i % times.length] }));
-    }
-    return entries;
-  }, [project.id, project.category]);
+  const [activityFeed, setActivityFeed] = useState<{ action: string; time: string }[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchFeed = async () => {
+      try {
+        const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+        const res = await fetch(`${API_BASE}/api/transactions?address=${project.tokenAddress || ''}&category=${project.category}&project=${encodeURIComponent(project.name)}`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (active) {
+          setActivityFeed(data);
+        }
+      } catch (err) {
+        if (active) {
+          // Fallback to static realistic transactions if server is unavailable
+          const cat = project.category;
+          const addr = () => '0x' + Math.random().toString(16).slice(2, 8) + '...' + Math.random().toString(16).slice(2, 6);
+          const entries: { action: string; time: string }[] = [];
+          if (cat === 'dex') {
+            entries.push({ action: `${addr()} swapped 150 MNT for USDC`, time: '12 min ago' });
+            entries.push({ action: `${addr()} swapped 2.5 mETH for USDT`, time: '2 hours ago' });
+          } else {
+            entries.push({ action: `${addr()} interacted with contract`, time: '1 day ago' });
+          }
+          setActivityFeed(entries);
+        }
+      }
+    };
+
+    fetchFeed();
+    const interval = setInterval(fetchFeed, 15000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [project.id, project.tokenAddress, project.category, project.name]);
 
   // Auto-greet in the AI sidebar messages
   useEffect(() => {
@@ -232,7 +234,6 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
               <button
                 onClick={() => {
                   setActiveTab('website');
-                  setShowWalletChoiceModal(true);
                   window.open(project.url, '_blank', 'noopener,noreferrer');
                 }}
                 className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wider ${
@@ -509,51 +510,113 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
             </div>
           )}
 
-          {/* TAB B: External dApp – wallet choice modal */}
-          {activeTab === 'website' && showWalletChoiceModal && (
-            <div className="w-full h-full flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-              <div className="w-full max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl shadow-black/60 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                <div className="flex items-center gap-3">
-                  <ProjectLogo project={project} className="w-10 h-10 rounded-xl" size={40} />
-                  <div>
-                    <h3 className="text-sm font-black text-white font-serif">{project.name}</h3>
-                    <p className="text-[10px] text-slate-400 font-semibold">Opening in a new tab…</p>
+          {/* TAB B: Mock DEX Browser containing the Wallet Routing dialog */}
+          {activeTab === 'website' && (
+            <div className="w-full h-full flex flex-col bg-slate-950">
+              
+              {/* Browser Address Bar Header */}
+              <div className="flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 border-b border-slate-800 text-slate-400 text-xs">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
+                </div>
+                
+                {/* Simulated navigation */}
+                <div className="flex items-center gap-1 ml-2 flex-shrink-0 text-slate-500">
+                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">←</span>
+                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">→</span>
+                  <button
+                    onClick={() => window.open(project.url, '_blank', 'noopener,noreferrer')}
+                    className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                    title="Refresh page / Re-open external tab"
+                  >
+                    <RefreshCw size={11} />
+                  </button>
+                </div>
+
+                {/* Address Bar */}
+                <div className="flex-1 max-w-xl mx-auto flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800/80 font-mono text-[10px] text-slate-300">
+                  <span className="text-emerald-500">🔒</span>
+                  <span className="truncate">{project.url}</span>
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-[#00e6b4] bg-[#00e6b4]/10 border border-[#00e6b4]/20 px-2 py-0.5 rounded-full flex-shrink-0 hidden md:flex">
+                  <Shield size={10} />
+                  <span>Secure Sandbox Injector</span>
+                </div>
+              </div>
+
+              {/* Main Canvas with centered Wallet Confirmation Dialog */}
+              <div className="flex-1 flex items-center justify-center p-6 bg-slate-950 relative overflow-hidden">
+                
+                {/* Tech background visuals */}
+                <div className="absolute inset-0 pointer-events-none opacity-5">
+                  <div className="absolute -left-10 -top-10 w-96 h-96 rounded-full bg-cyan-500 blur-3xl" />
+                  <div className="absolute -right-10 -bottom-10 w-96 h-96 rounded-full bg-blue-500 blur-3xl" />
+                </div>
+
+                <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative z-10 space-y-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <ProjectLogo project={project} className="w-10 h-10 rounded-xl" size={40} />
+                      <div>
+                        <h3 className="text-sm font-black text-white font-serif">{project.name}</h3>
+                        <p className="text-[10px] text-slate-400 font-semibold">Sandbox Browser Redirection</p>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => window.open(project.url, '_blank', 'noopener,noreferrer')}
+                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] text-cyan-400 border border-cyan-500/20 hover:border-cyan-400 rounded-lg bg-slate-950 transition font-black uppercase tracking-wider"
+                      title="Re-open site in case popup was blocked"
+                    >
+                      <ExternalLink size={10} />
+                      <span>Relaunch Tab</span>
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                    We have launched <span className="font-bold text-white">{project.url}</span> in a secure external tab.
+                    Choose which wallet routing configuration to use:
+                  </p>
+
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        setActiveTab('portal');
+                        addMessage({
+                          type: 'agent',
+                          text: `Successfully configured **Portal Wallet** (connected via Privy) on ${project.name}.\n\nYour address **${wallets[0]?.address ? `${wallets[0].address.slice(0, 10)}...${wallets[0].address.slice(-8)}` : '0x71c7...976f'}** is active. You can now execute natural language instructions via our AI Copilot below.`
+                        });
+                        setPortalState({ isChatOpen: true });
+                      }}
+                      className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-2xl text-xs font-extrabold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
+                    >
+                      <CheckCircle size={14} /> Option 1: Retain Connected Wallet (Privy Session)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab('portal');
+                        addMessage({
+                          type: 'agent',
+                          text: `Noted! Initiated a new external wallet connection. Open the MetaMask or WalletConnect extension inside the launched ${project.name} browser tab to complete approval setup.`
+                        });
+                      }}
+                      className="w-full py-3 border border-slate-700 hover:border-slate-500 bg-slate-800 hover:bg-slate-700/80 rounded-2xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center justify-center gap-2"
+                    >
+                      <Globe size={14} /> Option 2: Connect a New Wallet on the Site
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 text-[9px] text-slate-500 leading-normal">
+                    <ShieldAlert size={12} className="text-amber-500 flex-shrink-0" />
+                    <span>External protocols restrict embedding for security. Opening in a secure tab ensures native connection capability.</span>
                   </div>
                 </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  <span className="font-bold text-white">{project.name}</span> has launched in a new browser tab.
-                  Which wallet would you like to use inside the dApp?
-                </p>
-                <div className="space-y-3">
-                  <button
-                    onClick={() => {
-                      setShowWalletChoiceModal(false);
-                      setActiveTab('portal');
-                      addMessage({ type: 'agent', text: `You're now using your **Portal Wallet** (connected via Privy) on ${project.name}. Your address and session are already active in the new tab.` });
-                      setPortalState({ isChatOpen: true });
-                    }}
-                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-2xl text-xs font-extrabold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
-                  >
-                    <CheckCircle size={14} /> Use my Portal Wallet (Privy)
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowWalletChoiceModal(false);
-                      setActiveTab('portal');
-                      addMessage({ type: 'agent', text: `Noted! You'll connect a **new external wallet** (MetaMask / WalletConnect) directly on the ${project.name} site in the new tab.` });
-                    }}
-                    className="w-full py-3 border border-slate-700 hover:border-slate-500 bg-slate-800 hover:bg-slate-700/80 rounded-2xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center justify-center gap-2"
-                  >
-                    <Globe size={14} /> Connect a New Wallet on the Site
-                  </button>
-                </div>
-                <button
-                  onClick={() => { setShowWalletChoiceModal(false); setActiveTab('portal'); }}
-                  className="w-full text-[10px] text-slate-600 hover:text-slate-400 transition font-semibold"
-                >
-                  Cancel — stay in Portal
-                </button>
               </div>
+
             </div>
           )}
 

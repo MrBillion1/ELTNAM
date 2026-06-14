@@ -237,10 +237,10 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
           {activeInterface === 'dapp' && (
             <button
               onClick={() => setPortalState({ isChatOpen: false })}
-              title="Close Copilot Panel"
+              title="Return to dApp Dashboard"
               className="mr-1.5 px-2.5 py-1 text-[10px] font-black rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-[var(--text-secondary)] hover:bg-[var(--card-hover-bg)] transition flex items-center gap-1 uppercase tracking-wider"
             >
-              <span>✕ Close</span>
+              <span>← Return</span>
             </button>
           )}
           <button
