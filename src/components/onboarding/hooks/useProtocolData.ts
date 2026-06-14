@@ -19,32 +19,43 @@ const fetcher = async (url: string) => {
 };
 
 export function useProtocolData(project: Project) {
+  // Build the query string — pass baseline values so the API can fall back to them
+  const params = new URLSearchParams({
+    slug:     project.defillamaSlug || '',
+    address:  project.tokenAddress  || '',
+    name:     project.name,
+    baseTvl:  project.tvl,
+    baseFees: project.fees24h,
+  });
+
   const { data, error, isLoading } = useSWR<ProtocolData>(
-    `/api/protocol?slug=${project.defillamaSlug || ''}&address=${project.tokenAddress || ''}&name=${encodeURIComponent(project.name)}&baseTvl=${encodeURIComponent(project.tvl)}&baseFees=${encodeURIComponent(project.fees24h)}`,
+    `/api/protocol?${params.toString()}`,
     fetcher,
     {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 60000, // 60s revalidation cache
+      revalidateOnFocus:    false,
+      revalidateOnReconnect: true,
+      // Refresh every 5 minutes so fees stay current
+      refreshInterval:      5 * 60 * 1000,
+      dedupingInterval:     60_000,
       fallbackData: {
-        tvl: project.tvl,
-        mantleTvl: project.tvl,
-        fees24h: project.fees24h,
+        tvl:        project.tvl,
+        mantleTvl:  project.tvl,
+        fees24h:    project.fees24h,
         dataSource: 'Baseline',
-        isStale: true,
-        fetchedAt: Date.now(),
+        isStale:    true,
+        fetchedAt:  Date.now(),
       },
     }
   );
 
   return {
     data: data || {
-      tvl: project.tvl,
-      mantleTvl: project.tvl,
-      fees24h: project.fees24h,
+      tvl:        project.tvl,
+      mantleTvl:  project.tvl,
+      fees24h:    project.fees24h,
       dataSource: 'Baseline',
-      isStale: true,
-      fetchedAt: Date.now(),
+      isStale:    true,
+      fetchedAt:  Date.now(),
     },
     error,
     isLoading,

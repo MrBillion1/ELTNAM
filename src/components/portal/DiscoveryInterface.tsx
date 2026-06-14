@@ -287,7 +287,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     return () => clearInterval(interval);
   }, [setPortalState]);
 
-  // --- Real TVL from /api/chain-stats (DeFiLlama) with public API fallback ---
+  // --- Real TVL + 24h Fees from /api/chain-stats (DeFiLlama) with public API fallback ---
   useEffect(() => {
     const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
     const fetchTvl = async () => {
@@ -296,6 +296,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         let chainTvlChange = '';
         let ecosystemTvl = '';
         let ecosystemTvlChange = '';
+        let fees24h = '';
         let success = false;
 
         try {
@@ -306,6 +307,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             chainTvlChange = d.chainTvlChange;
             ecosystemTvl = d.ecosystemTvl;
             ecosystemTvlChange = d.ecosystemTvlChange;
+            fees24h = d.fees24h || '';
             success = true;
           }
         } catch {
@@ -314,9 +316,13 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
 
         if (!success) {
           // Direct fetch from DeFiLlama public endpoints
-          const histRes = await fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle');
-          if (histRes.ok) {
-            const hist = await histRes.json();
+          const [histRes, feesRes] = await Promise.allSettled([
+            fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle'),
+            fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees'),
+          ]);
+
+          if (histRes.status === 'fulfilled' && histRes.value.ok) {
+            const hist = await histRes.value.json();
             if (Array.isArray(hist) && hist.length >= 2) {
               const latest = hist[hist.length - 1];
               const prev = hist[hist.length - 2];
@@ -339,6 +345,21 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               success = true;
             }
           }
+
+          // Try to get chain-wide 24h fees
+          if (feesRes.status === 'fulfilled' && feesRes.value.ok) {
+            try {
+              const fd = await feesRes.value.json();
+              if (fd?.total24h > 0) {
+                const f = fd.total24h;
+                fees24h = f >= 1e6
+                  ? `$${(f / 1e6).toFixed(1)}M`
+                  : f >= 1e3
+                    ? `$${(f / 1e3).toFixed(1)}K`
+                    : `$${Math.round(f).toLocaleString()}`;
+              }
+            } catch { /* ignore */ }
+          }
         }
 
         if (success) {
@@ -349,6 +370,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               tvlChange: ecosystemTvlChange || usePortalStore.getState().chainStats.tvlChange,
               chainTvl: chainTvl || usePortalStore.getState().chainStats.chainTvl,
               chainTvlChange: chainTvlChange || usePortalStore.getState().chainStats.chainTvlChange,
+              fees24h: fees24h || usePortalStore.getState().chainStats.fees24h,
             }
           });
         }
@@ -360,6 +382,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     const interval = setInterval(fetchTvl, 60000);
     return () => clearInterval(interval);
   }, [setPortalState]);
+
 
   // --- Balance polling ---
   useEffect(() => {
@@ -649,7 +672,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
                 { label: t.tvl, value: chainStats.chainTvl, desc: chainStats.chainTvlChange, color: 'text-cyan-600 dark:text-cyan-400' },
                 { label: t.latestBlock, value: chainStats.blockNumber, desc: 'Mantle Mainnet', color: 'text-blue-600 dark:text-blue-400' },
                 { label: t.gasPrice, value: chainStats.gasPrice, desc: 'Ultra-low cost', color: 'text-[#00b38c] dark:text-[#00e6b4]' },
-                { label: t.activeUsers, value: chainStats.activeUsers24h, desc: '24h Transactions', color: 'text-purple-600 dark:text-purple-400' },
+                { label: '24h Fees', value: chainStats.fees24h || '—', desc: 'Chain-wide • DeFiLlama', color: 'text-purple-600 dark:text-purple-400' },
               ].map((st, idx) => (
                 <div key={idx} className="p-2.5 rounded-xl bg-white/80 dark:bg-black/50 border border-[#00e6b4]/10 dark:border-slate-800/80 space-y-0.5 shadow-sm hover:scale-[1.02] transition duration-200">
                   <p className="text-[8px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
