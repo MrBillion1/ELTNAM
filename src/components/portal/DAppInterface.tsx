@@ -27,6 +27,13 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
   // Workspace Tab: 'portal' (interactive analytics) or 'website' (redirect + modal)
   const [activeTab, setActiveTab] = useState<'portal' | 'website'>('portal');
+  const [showWalletChoice, setShowWalletChoice] = useState(true);
+
+  useEffect(() => {
+    if (activeTab === 'website') {
+      setShowWalletChoice(true);
+    }
+  }, [activeTab]);
 
   // Interactive Simulator States
   const [simStep, setSimStep] = useState<'input' | 'processing' | 'done'>('input');
@@ -274,7 +281,6 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
               <button
                 onClick={() => {
                   setActiveTab('website');
-                  window.open(project.url, '_blank', 'noopener,noreferrer');
                 }}
                 className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wider ${
                   activeTab === 'website'
@@ -550,9 +556,9 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
             </div>
           )}
 
-          {/* TAB B: Mock DEX Browser containing the Wallet Routing dialog */}
+          {/* TAB B: Embedded dApp Browser containing the Wallet Routing dialog overlay */}
           {activeTab === 'website' && (
-            <div className="w-full h-full flex flex-col bg-slate-950">
+            <div className="w-full h-full flex flex-col bg-slate-950 relative">
               
               {/* Browser Address Bar Header */}
               <div className="flex items-center gap-2.5 px-4 py-2.5 bg-slate-900 border-b border-slate-800 text-slate-400 text-xs">
@@ -567,9 +573,12 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                   <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">←</span>
                   <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">→</span>
                   <button
-                    onClick={() => window.open(project.url, '_blank', 'noopener,noreferrer')}
+                    onClick={() => {
+                      const iframe = document.getElementById('dapp-iframe') as HTMLIFrameElement;
+                      if (iframe) iframe.src = project.url;
+                    }}
                     className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                    title="Refresh page / Re-open external tab"
+                    title="Refresh page / iframe content"
                   >
                     <RefreshCw size={11} />
                   </button>
@@ -588,73 +597,78 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 </div>
               </div>
 
-              {/* Main Canvas with centered Wallet Confirmation Dialog */}
-              <div className="flex-1 flex items-center justify-center p-6 bg-slate-950 relative overflow-hidden">
-                
-                {/* Tech background visuals */}
-                <div className="absolute inset-0 pointer-events-none opacity-5">
-                  <div className="absolute -left-10 -top-10 w-96 h-96 rounded-full bg-cyan-500 blur-3xl" />
-                  <div className="absolute -right-10 -bottom-10 w-96 h-96 rounded-full bg-blue-500 blur-3xl" />
-                </div>
+              {/* Main iframe container */}
+              <div className="flex-1 w-full h-full relative bg-slate-900">
+                <iframe
+                  id="dapp-iframe"
+                  src={project.url}
+                  className="w-full h-full border-none bg-white"
+                  title={`${project.name} Website`}
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+                />
 
-                <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative z-10 space-y-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <ProjectLogo project={project} className="w-10 h-10 rounded-xl" size={40} />
-                      <div>
-                        <h3 className="text-sm font-black text-white font-serif">{project.name}</h3>
-                        <p className="text-[10px] text-slate-400 font-semibold">Sandbox Browser Redirection</p>
+                {/* Centered Wallet Confirmation Card Overlay */}
+                {showWalletChoice && (
+                  <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-30 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <ProjectLogo project={project} className="w-10 h-10 rounded-xl" size={40} />
+                          <div>
+                            <h3 className="text-sm font-black text-white font-serif">{project.name}</h3>
+                            <p className="text-[10px] text-slate-400 font-semibold">Wallet Routing Connection</p>
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => setShowWalletChoice(false)}
+                          className="p-1.5 hover:bg-slate-850 rounded-full text-slate-400 hover:text-white transition"
+                          title="Skip and view website directly"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                        A secure sandbox session has been injected for <span className="font-bold text-white">{project.name}</span>. 
+                        Choose how you would like to connect your wallet:
+                      </p>
+
+                      <div className="space-y-3">
+                        <button
+                          onClick={() => {
+                            setShowWalletChoice(false);
+                            addMessage({
+                              type: 'agent',
+                              text: `Successfully configured **Portal Wallet** (connected via Privy) on ${project.name}.\n\nYour address **${wallets[0]?.address ? `${wallets[0].address.slice(0, 10)}...${wallets[0].address.slice(-8)}` : '0x71c7...976f'}** is active. You can now execute natural language instructions via our AI Copilot below.`
+                            });
+                            setPortalState({ isChatOpen: true });
+                          }}
+                          className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-2xl text-xs font-extrabold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 hover:scale-[1.01] active:scale-[0.99]"
+                        >
+                          <CheckCircle size={14} /> Option 1: Retain Connected Wallet (Privy Session)
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowWalletChoice(false);
+                            addMessage({
+                              type: 'agent',
+                              text: `Noted! Initiated a new external wallet connection. Open the MetaMask or WalletConnect extension inside the launched ${project.name} browser tab to complete approval setup.`
+                            });
+                          }}
+                          className="w-full py-3 border border-slate-700 hover:border-slate-500 bg-slate-800 hover:bg-slate-750 rounded-2xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
+                        >
+                          <Globe size={14} /> Option 2: Connect a New Wallet on the Site
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 text-[9px] text-slate-500 leading-normal font-semibold">
+                        <ShieldAlert size={12} className="text-amber-500 flex-shrink-0" />
+                        <span>This sandbox injects EVM wallet protocols directly. Click dismiss above to browse the site.</span>
                       </div>
                     </div>
-                    
-                    <button
-                      onClick={() => window.open(project.url, '_blank', 'noopener,noreferrer')}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] text-cyan-400 border border-cyan-500/20 hover:border-cyan-400 rounded-lg bg-slate-950 transition font-black uppercase tracking-wider"
-                      title="Re-open site in case popup was blocked"
-                    >
-                      <ExternalLink size={10} />
-                      <span>Relaunch Tab</span>
-                    </button>
                   </div>
-
-                  <p className="text-xs text-slate-300 leading-relaxed font-semibold">
-                    We have launched <span className="font-bold text-white">{project.url}</span> in a secure external tab.
-                    Choose which wallet routing configuration to use:
-                  </p>
-
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => {
-                        setActiveTab('portal');
-                        addMessage({
-                          type: 'agent',
-                          text: `Successfully configured **Portal Wallet** (connected via Privy) on ${project.name}.\n\nYour address **${wallets[0]?.address ? `${wallets[0].address.slice(0, 10)}...${wallets[0].address.slice(-8)}` : '0x71c7...976f'}** is active. You can now execute natural language instructions via our AI Copilot below.`
-                        });
-                        setPortalState({ isChatOpen: true });
-                      }}
-                      className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-2xl text-xs font-extrabold text-white transition flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
-                    >
-                      <CheckCircle size={14} /> Option 1: Retain Connected Wallet (Privy Session)
-                    </button>
-                    <button
-                      onClick={() => {
-                        setActiveTab('portal');
-                        addMessage({
-                          type: 'agent',
-                          text: `Noted! Initiated a new external wallet connection. Open the MetaMask or WalletConnect extension inside the launched ${project.name} browser tab to complete approval setup.`
-                        });
-                      }}
-                      className="w-full py-3 border border-slate-700 hover:border-slate-500 bg-slate-800 hover:bg-slate-700/80 rounded-2xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center justify-center gap-2"
-                    >
-                      <Globe size={14} /> Option 2: Connect a New Wallet on the Site
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 text-[9px] text-slate-500 leading-normal">
-                    <ShieldAlert size={12} className="text-amber-500 flex-shrink-0" />
-                    <span>External protocols restrict embedding for security. Opening in a secure tab ensures native connection capability.</span>
-                  </div>
-                </div>
+                )}
               </div>
 
             </div>
