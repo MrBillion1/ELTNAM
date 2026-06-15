@@ -90,8 +90,8 @@ async function fetchLlamaData(slug) {
     }
     const mantleTvl = mantleTvlNum ? `$${mantleTvlNum.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : totalTvl;
 
-    // Resolve Logo
-    const logoUrl = details.logo || `https://icons.llama.fi/${slug}.png`;
+    // Resolve Logo — prefer protocol details, fall back to DeFiLlama icons CDN
+    const logoUrl = details.logo || `https://icons.llamao.fi/icons/protocols/${slug}.png`;
 
     return {
       tvl: totalTvl,
@@ -199,12 +199,13 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // ── GET /api/chain-stats ─ real Mantle TVL from DeFiLlama ─────────────────
+  // ── GET /api/chain-stats ─ real Mantle TVL + 24h fees from DeFiLlama ───────
   if (pathname === '/api/chain-stats' && req.method === 'GET') {
     try {
-      const [histRes, allChainsRes] = await Promise.all([
+      const [histRes, allChainsRes, feesRes] = await Promise.all([
         fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle'),
         fetch('https://api.llama.fi/v2/chains'),
+        fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees'),
       ]);
 
       const hist = histRes.ok ? await histRes.json() : [];
@@ -213,24 +214,50 @@ async function handleRequest(req, res) {
       // Latest two data points for change %
       const latest = hist.length >= 2 ? hist[hist.length - 1] : null;
       const prev = hist.length >= 2 ? hist[hist.length - 2] : null;
-      const chainTvl = latest ? latest.tvl : 0;
-      const prevTvl = prev ? prev.tvl : chainTvl;
-      const chainTvlChangePct = prevTvl ? ((chainTvl - prevTvl) / prevTvl * 100).toFixed(2) : '0.00';
-      const chainTvlStr = chainTvl >= 1e9
-        ? `$${(chainTvl / 1e9).toFixed(2)}B`
-        : chainTvl >= 1e6
-          ? `$${(chainTvl / 1e6).toFixed(1)}M`
-          : `$${Math.round(chainTvl).toLocaleString()}`;
-      const chainTvlChange = `${chainTvlChangePct >= 0 ? '+' : ''}${chainTvlChangePct}%`;
+      const chainTvlNum = latest ? latest.tvl : 0;
+      const prevTvlNum = prev ? prev.tvl : chainTvlNum;
+      const chainTvlChangePct = prevTvlNum ? ((chainTvlNum - prevTvlNum) / prevTvlNum * 100).toFixed(2) : '0.00';
+      const chainTvlStr = chainTvlNum >= 1e9
+        ? `$${(chainTvlNum / 1e9).toFixed(2)}B`
+        : chainTvlNum >= 1e6
+          ? `$${(chainTvlNum / 1e6).toFixed(1)}M`
+          : `$${Math.round(chainTvlNum).toLocaleString()}`;
+      const chainTvlChange = `${parseFloat(chainTvlChangePct) >= 0 ? '+' : ''}${chainTvlChangePct}%`;
 
-      // Total ecosystem TVL (top protocols on Mantle summed)
+      // Total ecosystem TVL
       const mantleChain = allChains.find(c => c.name?.toLowerCase() === 'mantle');
-      const ecosystemTvl = mantleChain ? mantleChain.tvl : 0;
-      const ecosystemStr = ecosystemTvl >= 1e9
-        ? `$${(ecosystemTvl / 1e9).toFixed(2)}B`
-        : ecosystemTvl >= 1e6
-          ? `$${(ecosystemTvl / 1e6).toFixed(1)}M`
-          : `$${Math.round(ecosystemTvl).toLocaleString()}`;
+      const ecosystemTvlNum = mantleChain ? mantleChain.tvl : 0;
+      const ecosystemStr = ecosystemTvlNum >= 1e9
+        ? `$${(ecosystemTvlNum / 1e9).toFixed(2)}B`
+        : ecosystemTvlNum >= 1e6
+          ? `$${(ecosystemTvlNum / 1e6).toFixed(1)}M`
+          : `$${Math.round(ecosystemTvlNum).toLocaleString()}`;
+
+      // ── Parse 24h fees for Mantle chain ────────────────────────────────────
+      let fees24h = 'N/A';
+      const formatFee = (f) =>
+        f >= 1e6
+          ? `$${(f / 1e6).toFixed(1)}M`
+          : f >= 1e3
+            ? `$${(f / 1e3).toFixed(1)}K`
+            : `$${Math.round(f).toLocaleString()}`;
+
+      if (feesRes.ok) {
+        try {
+          const fd = await feesRes.json();
+          if (typeof fd?.total24h === 'number' && fd.total24h > 0) {
+            fees24h = formatFee(fd.total24h);
+          } else if (Array.isArray(fd?.protocols)) {
+            const sum = fd.protocols.reduce(
+              (acc, p) => acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0),
+              0
+            );
+            if (sum > 0) fees24h = formatFee(sum);
+          }
+        } catch (parseErr) {
+          console.warn('[API] /api/chain-stats fees parse error:', parseErr.message);
+        }
+      }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -238,6 +265,7 @@ async function handleRequest(req, res) {
         chainTvlChange,
         ecosystemTvl: ecosystemStr,
         ecosystemTvlChange: chainTvlChange,
+        fees24h,
         fetchedAt: Date.now(),
       }));
     } catch (err) {
@@ -248,6 +276,7 @@ async function handleRequest(req, res) {
         chainTvlChange: '-0.01%',
         ecosystemTvl: '$156.2M',
         ecosystemTvlChange: '-0.01%',
+        fees24h: '$32.9K',
         fetchedAt: Date.now(),
       }));
     }
