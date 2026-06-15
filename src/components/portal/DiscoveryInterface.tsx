@@ -290,6 +290,14 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   // --- Real TVL + 24h Fees from /api/chain-stats (DeFiLlama) with public API fallback ---
   useEffect(() => {
     const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+    const formatFee = (f: number) =>
+      f >= 1e6
+        ? `$${(f / 1e6).toFixed(1)}M`
+        : f >= 1e3
+          ? `$${(f / 1e3).toFixed(1)}K`
+          : `$${Math.round(f).toLocaleString()}`;
+
     const fetchTvl = async () => {
       try {
         let chainTvl = '';
@@ -297,25 +305,25 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         let ecosystemTvl = '';
         let ecosystemTvlChange = '';
         let fees24h = '';
-        let success = false;
+        let tvlSuccess = false;
 
+        // ── Step 1: Try the Vercel serverless function ──────────────────────────
         try {
           const res = await fetch(`${API_BASE}/api/chain-stats`);
           if (res.ok) {
             const d = await res.json();
-            chainTvl = d.chainTvl;
-            chainTvlChange = d.chainTvlChange;
-            ecosystemTvl = d.ecosystemTvl;
-            ecosystemTvlChange = d.ecosystemTvlChange;
-            fees24h = d.fees24h || '';
-            success = true;
+            chainTvl = d.chainTvl || '';
+            chainTvlChange = d.chainTvlChange || '';
+            ecosystemTvl = d.ecosystemTvl || '';
+            ecosystemTvlChange = d.ecosystemTvlChange || '';
+            // Accept any string value — 'N/A' is still a valid resolved state
+            fees24h = typeof d.fees24h === 'string' ? d.fees24h : '';
+            tvlSuccess = true;
           }
-        } catch {
-          // Ignore backend fetch error and try direct DeFiLlama fetch
-        }
+        } catch { /* fall through to direct fetch */ }
 
-        if (!success) {
-          // Direct fetch from DeFiLlama public endpoints
+        // ── Step 2: If the API call failed, fetch DeFiLlama directly ────────────
+        if (!tvlSuccess) {
           const [histRes, feesRes] = await Promise.allSettled([
             fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle'),
             fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees'),
@@ -329,48 +337,66 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               const latestTvl = latest ? latest.tvl : 0;
               const prevTvl = prev ? prev.tvl : latestTvl;
               const changePct = prevTvl ? ((latestTvl - prevTvl) / prevTvl * 100).toFixed(2) : '0.00';
-              
-              const formatTvl = (val: number) => {
-                return val >= 1e9
+
+              const formatTvl = (val: number) =>
+                val >= 1e9
                   ? `$${(val / 1e9).toFixed(2)}B`
                   : val >= 1e6
                     ? `$${(val / 1e6).toFixed(1)}M`
                     : `$${Math.round(val).toLocaleString()}`;
-              };
 
               chainTvl = formatTvl(latestTvl);
               chainTvlChange = `${parseFloat(changePct) >= 0 ? '+' : ''}${changePct}%`;
               ecosystemTvl = chainTvl;
               ecosystemTvlChange = chainTvlChange;
-              success = true;
+              tvlSuccess = true;
             }
           }
 
-          // Try to get chain-wide 24h fees
           if (feesRes.status === 'fulfilled' && feesRes.value.ok) {
             try {
               const fd = await feesRes.value.json();
-              if (fd?.total24h > 0) {
-                const f = fd.total24h;
-                fees24h = f >= 1e6
-                  ? `$${(f / 1e6).toFixed(1)}M`
-                  : f >= 1e3
-                    ? `$${(f / 1e3).toFixed(1)}K`
-                    : `$${Math.round(f).toLocaleString()}`;
+              // data.total24h is DeFiLlama's Mantle-chain aggregate
+              if (typeof fd?.total24h === 'number' && fd.total24h > 0) {
+                fees24h = formatFee(fd.total24h);
+              } else if (Array.isArray(fd?.protocols)) {
+                // Fallback: sum all listed protocols (already Mantle-filtered)
+                const sum = (fd.protocols as any[]).reduce(
+                  (acc: number, p: any) =>
+                    acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0),
+                  0
+                );
+                if (sum > 0) fees24h = formatFee(sum);
               }
             } catch { /* ignore */ }
           }
         }
 
-        if (success) {
+        // ── Step 3: If fees still blank, fetch DeFiLlama directly as top-up ────
+        if (!fees24h) {
+          try {
+            const feesRes = await fetch(
+              'https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees'
+            );
+            if (feesRes.ok) {
+              const fd = await feesRes.json();
+              if (typeof fd?.total24h === 'number' && fd.total24h > 0) {
+                fees24h = formatFee(fd.total24h);
+              }
+            }
+          } catch { /* ignore */ }
+        }
+
+        // ── Commit to store ─────────────────────────────────────────────────────
+        if (tvlSuccess || fees24h) {
+          const prev = usePortalStore.getState().chainStats;
           setPortalState({
             chainStats: {
-              ...usePortalStore.getState().chainStats,
-              tvl: ecosystemTvl || usePortalStore.getState().chainStats.tvl,
-              tvlChange: ecosystemTvlChange || usePortalStore.getState().chainStats.tvlChange,
-              chainTvl: chainTvl || usePortalStore.getState().chainStats.chainTvl,
-              chainTvlChange: chainTvlChange || usePortalStore.getState().chainStats.chainTvlChange,
-              fees24h: fees24h || usePortalStore.getState().chainStats.fees24h,
+              ...prev,
+              ...(chainTvl      && { tvl: ecosystemTvl || chainTvl, chainTvl }),
+              ...(chainTvlChange && { tvlChange: ecosystemTvlChange || chainTvlChange, chainTvlChange }),
+              // Always update fees24h if we resolved a value (even 'N/A') to clear 'Loading…'
+              fees24h: fees24h || prev.fees24h,
             }
           });
         }

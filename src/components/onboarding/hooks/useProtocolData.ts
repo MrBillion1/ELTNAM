@@ -20,12 +20,13 @@ const fetcher = async (url: string) => {
 
 export function useProtocolData(project: Project) {
   // Build the query string — pass baseline values so the API can fall back to them
+  // `name` lets the Mantle-overview lookup match by display name when slug differs
   const params = new URLSearchParams({
     slug:     project.defillamaSlug || '',
     address:  project.tokenAddress  || '',
-    name:     project.name,
-    baseTvl:  project.tvl,
-    baseFees: project.fees24h,
+    name:     project.name          || '',
+    baseTvl:  project.tvl           || '',
+    baseFees: project.fees24h       || '',
   });
 
   const { data, error, isLoading } = useSWR<ProtocolData>(

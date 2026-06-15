@@ -1,8 +1,6 @@
 // api/chain-stats.js - Vercel Serverless Function
 // Fetches real-time Mantle chain TVL and 24h fees from DeFiLlama
 
-const MANTLE_SLUG = 'mantle'; // DeFiLlama chain slug for fees
-
 function formatValue(val) {
   if (!val || isNaN(val)) return null;
   if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
@@ -11,33 +9,54 @@ function formatValue(val) {
   return `$${Math.round(val).toLocaleString()}`;
 }
 
+/**
+ * Fetch Mantle-chain 24h fees.
+ *
+ * Strategy (in order):
+ * 1. DeFiLlama /overview/fees/Mantle → data.total24h
+ *    (DeFiLlama chain-scoped endpoint already restricts to Mantle-chain activity)
+ * 2. Sum proto.total24h from each protocol in data.protocols
+ *    (secondary aggregate if top-level total24h is missing)
+ * 3. DeFiLlama /overview/fees/Mantle with dailyRevenue dataType as cross-check
+ */
 async function fetchChainFees24h() {
-  // DeFiLlama fees summary overview for Mantle protocols
+  // Source 1: DeFiLlama Mantle fee overview (dailyFees)
   try {
-    const res = await fetch(`https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=false&dataType=dailyFees`);
+    const res = await fetch(
+      'https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees',
+      { headers: { Accept: 'application/json' } }
+    );
     if (res.ok) {
       const data = await res.json().catch(() => null);
-      if (data && Array.isArray(data.protocols)) {
-        let totalMantleFees = 0;
-        for (const proto of data.protocols) {
-          if (proto.breakdown24h) {
-            // Find Mantle case-insensitively in the breakdown
-            const mantleKey = Object.keys(proto.breakdown24h).find(k => k.toLowerCase() === 'mantle');
-            if (mantleKey && typeof proto.breakdown24h[mantleKey] === 'number') {
-              totalMantleFees += proto.breakdown24h[mantleKey];
-            }
-          } else if (typeof proto.total24h === 'number') {
-            // Fallback for native/single-chain Mantle protocols
-            const chains = proto.chains || [];
-            const isMantleOnly = chains.length === 1 && chains[0].toLowerCase() === 'mantle';
-            if (isMantleOnly) {
-              totalMantleFees += proto.total24h;
+      if (data) {
+        // Top-level total24h is DeFiLlama's sum of all Mantle-chain protocol fees
+        if (typeof data.total24h === 'number' && data.total24h > 0) {
+          return formatValue(data.total24h);
+        }
+        // Fallback: sum individual protocol totals (already Mantle-filtered by the endpoint)
+        if (Array.isArray(data.protocols)) {
+          let sum = 0;
+          for (const proto of data.protocols) {
+            if (typeof proto.total24h === 'number' && proto.total24h > 0) {
+              sum += proto.total24h;
             }
           }
+          if (sum > 0) return formatValue(sum);
         }
-        if (totalMantleFees > 0) {
-          return formatValue(totalMantleFees);
-        }
+      }
+    }
+  } catch (_) { /* fall through */ }
+
+  // Source 2: DeFiLlama Mantle revenue overview (dailyRevenue) as backup
+  try {
+    const res = await fetch(
+      'https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyRevenue',
+      { headers: { Accept: 'application/json' } }
+    );
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.total24h > 0) {
+        return formatValue(data.total24h);
       }
     }
   } catch (_) { /* fall through */ }
