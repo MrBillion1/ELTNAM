@@ -318,7 +318,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
               {/* Dynamic Stats Banner */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: t.tvl, value: protocolData.tvl || project.tvl, desc: 'Total Value Locked', color: 'text-emerald-400' },
+                  { label: t.tvl, value: protocolData.mantleTvl || protocolData.tvl || project.tvl, desc: 'Total Value Locked', color: 'text-emerald-400' },
                   { label: '24h Fees', value: protocolData.fees24h || project.fees24h, desc: 'Protocol Revenue', color: 'text-cyan-400' },
                   { label: 'Platform Status', value: 'Active 🟢', desc: (project as any).auditor ? `Audited by ${(project as any).auditor}` : 'Security Reviewed', color: 'text-blue-400' },
                   { label: 'Gas Status', value: 'Sponsored ⚡', desc: 'Account Abstraction', color: 'text-[#00e6b4]' },

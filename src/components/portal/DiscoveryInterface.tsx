@@ -76,7 +76,7 @@ function ProjectDetailModal({ project, onClose, onProceedToDApp }: ProjectDetail
         <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
           <div>
             <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
-            <p className="text-xl font-black text-emerald-500">{data.tvl}</p>
+            <p className="text-xl font-black text-emerald-500">{data.mantleTvl || data.tvl}</p>
           </div>
           <div>
             <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>
@@ -716,11 +716,6 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
                   className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/20 theme-transition"
                 />
               </div>
-            </div>
-
-            {/* Result count (right side) */}
-            <div className="flex-shrink-0 text-[11px] text-[var(--text-secondary)] font-bold">
-              {filteredProjects.length} dApp{filteredProjects.length !== 1 ? 's' : ''}
             </div>
           </div>
 
