@@ -4,6 +4,7 @@ import { usePortalStore } from '../../store/usePortalStore';
 import { MANTLE_PROJECTS } from '../../lib/mantleProjects';
 import type { Project } from '../../lib/mantleProjects';
 import { ProjectLogo } from '../shared/ProjectLogo';
+import { BridgeIntentCard } from './BridgeIntentCard';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
@@ -34,7 +35,6 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showProjectSearch, setShowProjectSearch] = useState(false);
-  const [isAlphabetSearchOpen, setIsAlphabetSearchOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -144,6 +144,15 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
                         name: dataObj.toolCall.name,
                         status: 'running',
                         input: dataObj.toolCall.input,
+                      }
+                    });
+                  } else if (dataObj.toolResult) {
+                    updateMessage(agentMsgId, {
+                      toolCall: {
+                        name: dataObj.toolResult.name,
+                        status: 'done',
+                        input: dataObj.toolResult.input,
+                        result: dataObj.toolResult.result,
                       }
                     });
                   }
@@ -260,55 +269,6 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
         </div>
       </div>
 
-      {/* A–Z Quick Filter Pills (shown when messages are at start) */}
-      {messages.length <= 1 && (
-        <div className="px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]/40 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">
-            <Search size={10} />
-            <span>Search dApps A–Z</span>
-          </div>
-
-          {!isAlphabetSearchOpen ? (
-            <button
-              onClick={() => setIsAlphabetSearchOpen(true)}
-              className="flex items-center gap-1 px-3 py-1 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-[10px] font-black uppercase tracking-wider transition-all"
-            >
-              🔤 A-Z Filter
-            </button>
-          ) : (
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
-              <span className="text-[9px] text-[var(--text-secondary)] font-bold uppercase">Enter Letter:</span>
-              <input
-                type="text"
-                maxLength={1}
-                placeholder="A-Z"
-                className="w-10 h-7 text-center bg-[var(--bg-primary)] border border-[var(--accent-color)] rounded-lg text-xs font-black uppercase text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-color)]/20"
-                onChange={(e) => {
-                  const val = e.target.value.toLowerCase();
-                  if (/^[a-z]$/.test(val)) {
-                    setInput(val);
-                    inputRef.current?.focus();
-                  } else if (val === '') {
-                    setInput('');
-                  }
-                }}
-                autoFocus
-              />
-              <button
-                onClick={() => {
-                  setIsAlphabetSearchOpen(false);
-                  setInput('');
-                }}
-                className="p-1 hover:bg-[var(--bg-primary)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                title="Clear filter"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">
         {messages.map((msg) => {
@@ -332,23 +292,60 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
                 </div>
 
                 {msg.toolCall && (
-                  <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-cyan-400 font-bold uppercase tracking-wider">🛠️ {msg.toolCall.name}</span>
-                      {msg.toolCall.status === 'running' ? (
-                        <span className="text-amber-400 font-semibold flex items-center gap-1">
-                          <Loader size={8} className="animate-spin" /> Executing
-                        </span>
-                      ) : (
-                        <span className="text-emerald-400 font-semibold">Done</span>
+                  msg.toolCall.name === 'lifi_get_bridge_quote' && msg.toolCall.status === 'done' ? (
+                    <div className="mt-3">
+                      <BridgeIntentCard
+                        sourceChain={msg.toolCall.input.fromChain}
+                        destinationChain="Mantle"
+                        amount={msg.toolCall.input.amountUSD.toString()}
+                        tokenSymbol={msg.toolCall.input.fromToken}
+                        strategy={msg.toolCall.result?.strategy?.strategy || 'CLASSIC'}
+                        quote={msg.toolCall.result?.quote}
+                        wallet={wallets[0] || null}
+                        onCancel={() => {
+                          updateMessage(msg.id, { toolCall: undefined });
+                        }}
+                      />
+                    </div>
+                  ) : msg.toolCall.name === 'lifi_get_earn_vaults' && msg.toolCall.status === 'done' ? (
+                    <div className="mt-3 space-y-2 p-3 bg-slate-900 border border-slate-800 rounded-xl">
+                      <p className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wider">Top Yield Pools on Mantle</p>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {msg.toolCall.result?.vaults?.map((v: any) => (
+                          <div key={v.address || v.slug} className="p-2.5 bg-slate-950 border border-slate-850 rounded-lg flex justify-between items-center text-[10px]">
+                            <div>
+                              <p className="font-bold text-white">{v.protocol?.name || 'Unknown Protocol'}</p>
+                              <p className="text-[9px] text-slate-500">{v.underlyingTokens?.map((t: any) => t.symbol).join(' + ') || 'Tokens'}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-extrabold text-emerald-400">
+                                {v.analytics?.apy?.total ? `${(v.analytics.apy.total * 100).toFixed(2)}%` : '—'} APY
+                              </p>
+                              <p className="text-[9px] text-slate-600">TVL {v.tvl?.usd ? `$${(v.tvl.usd / 1e6).toFixed(1)}M` : '—'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-cyan-400 font-bold uppercase tracking-wider">🛠️ {msg.toolCall.name}</span>
+                        {msg.toolCall.status === 'running' ? (
+                          <span className="text-amber-400 font-semibold flex items-center gap-1">
+                            <Loader size={8} className="animate-spin" /> Executing
+                          </span>
+                        ) : (
+                          <span className="text-emerald-400 font-semibold">Done</span>
+                        )}
+                      </div>
+                      {msg.toolCall.input && (
+                        <pre className="text-[9px] font-mono bg-slate-900 p-2 rounded text-slate-400 overflow-x-auto">
+                          {JSON.stringify(msg.toolCall.input, null, 2)}
+                        </pre>
                       )}
                     </div>
-                    {msg.toolCall.input && (
-                      <pre className="text-[9px] font-mono bg-slate-900 p-2 rounded text-slate-400 overflow-x-auto">
-                        {JSON.stringify(msg.toolCall.input, null, 2)}
-                      </pre>
-                    )}
-                  </div>
+                  )
                 )}
               </div>
             </div>

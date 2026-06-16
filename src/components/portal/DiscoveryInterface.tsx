@@ -287,7 +287,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     return () => clearInterval(interval);
   }, [setPortalState]);
 
-  // --- Real TVL + 24h Fees from /api/chain-stats (DeFiLlama) with public API fallback ---
+  // --- Real TVL + 24h Fees from /api/chain-stats (DeFiLlama server source) ---
   useEffect(() => {
     const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
@@ -311,17 +311,18 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         // server.mjs now fetches fees server-side (no CORS issue)
         try {
           const res = await fetch(`${API_BASE}/api/chain-stats`);
+          if (!res.ok) throw new Error(`chain-stats failed: ${res.status}`);
           if (res.ok) {
             const d = await res.json();
             chainTvl = d.chainTvl || '';
             chainTvlChange = d.chainTvlChange || '';
             ecosystemTvl = d.ecosystemTvl || '';
             ecosystemTvlChange = d.ecosystemTvlChange || '';
-            // d.fees24h is now always populated server-side ('$32.9K', 'N/A', etc.)
+            // d.fees24h is now always populated server-side with a live value or 'N/A'.
             fees24h = d.fees24h != null ? String(d.fees24h) : '';
             tvlSuccess = !!(chainTvl || fees24h);
           }
-        } catch { /* fall through to direct fetch */ }
+        } catch (err) { throw err; }
 
         // ── Step 2: If the API call failed, fetch DeFiLlama directly ────────────
         if (!tvlSuccess) {
@@ -377,7 +378,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         // (Direct browser fetch of DeFiLlama is CORS-blocked; server.mjs handles
         //  this server-side now. If both fail, show a known snapshot value.)
         if (!fees24h) {
-          fees24h = '$32.9K'; // Last-known Mantle ecosystem 24h fees
+          fees24h = 'N/A';
         }
 
         // ── Commit to store — always write fees24h to clear the 'Loading…' state ─

@@ -3,6 +3,7 @@ import { type ConnectedWallet, type User } from '@privy-io/react-auth';
 import { usePortalStore } from '../../store/usePortalStore';
 import { DiscoveryInterface } from './DiscoveryInterface';
 import { DAppInterface } from './DAppInterface';
+import { useAutoSwitchToMantle } from '../onboarding/hooks/useAutoSwitchToMantle';
 
 interface MantleAgenticPortalProps {
   wallets: ConnectedWallet[];
@@ -11,6 +12,9 @@ interface MantleAgenticPortalProps {
 
 export default function MantleAgenticPortal({ wallets, user }: MantleAgenticPortalProps) {
   const { activeInterface, selectedProject, setPortalState, theme } = usePortalStore();
+
+  // Silent auto-switch connected EVM wallets to Mantle on connect
+  useAutoSwitchToMantle(wallets);
 
   // Populate user and wallet details in Zustand on load
   useEffect(() => {

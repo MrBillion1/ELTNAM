@@ -63,8 +63,8 @@ export async function fetchProtocolData(project: Project): Promise<ProtocolResul
       
       console.log(`[Waterfall] Successful fetch: ${src.name} served data for ${project.name}`);
       return {
-        tvl: data.tvl || project.tvl,
-        fees24h: data.fees24h || project.fees24h,
+        tvl: data.tvl ?? 'N/A',
+        fees24h: data.fees24h ?? 'N/A',
         dataSource: src.name,
         isStale: false,
         fetchedAt: Date.now(),

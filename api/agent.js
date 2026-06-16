@@ -1,5 +1,7 @@
 // api/agent.js - Vercel Serverless Function (SSE Streaming)
 
+import { streamAnthropicCall } from './_agentCore.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,68 +19,44 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!ANTHROPIC_KEY) {
-    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
-    res.write(`data: ${JSON.stringify({ text: '⚠️ ANTHROPIC_API_KEY not configured on Vercel environment. Please set it to activate Claude.' })}\n\n`);
+  if (!anthropicKey) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    res.write(`data: ${JSON.stringify({ text: 'ANTHROPIC_API_KEY is not configured on Vercel. Add it to activate Claude.' })}\n\n`);
     res.end();
     return;
   }
 
   try {
-    const { message, address, history = [] } = req.body;
-
+    const { message, address, balance = '0.00', history = [] } = req.body;
     const messages = [
       ...history
-        .filter(m => m.content?.trim())
-        .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })),
+        .filter((m) => m.content?.trim())
+        .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })),
       { role: 'user', content: message },
     ];
-
-    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1024,
-        stream: true,
-        system: `You are ELTNAM (the Mantle Ecosystem AI Copilot) — an elite guide for the Mantle L2 network (Chain ID: 5000). User wallet: ${address || 'Not connected'}. Be concise, data-backed, and risk-aware. Never expose API keys. Risk score every recommendation 1-10.`,
-        messages,
-      }),
-    });
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     });
 
-    const reader = anthropicRes.body.getReader();
-    const decoder = new TextDecoder();
+    const systemPrompt = [
+      'You are ELTNAM, the Mantle Ecosystem AI Copilot for Mantle L2 (Chain ID: 5000).',
+      `User wallet: ${address || 'Not connected'}. User balance: ${balance} MNT.`,
+      'Be concise, data-backed, and risk-aware. Never expose API keys.',
+      'Use LI.FI bridge tools for cross-chain intents. Show a confirmation card before any execution.',
+      'Use live protocol data where available; if a tool result isFallback or isStale, clearly say it is fallback data.',
+      'Risk score every recommendation from 1 to 10.',
+    ].join(' ');
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(6).trim();
-        if (payload === '[DONE]') continue;
-        try {
-          const parsed = JSON.parse(payload);
-          if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-            res.write(`data: ${JSON.stringify({ text: parsed.delta.text })}\n\n`);
-          }
-        } catch { /* skip malformed SSE lines */ }
-      }
-    }
-    res.end();
+    await streamAnthropicCall(messages, systemPrompt, anthropicKey, res, address);
   } catch (err) {
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });

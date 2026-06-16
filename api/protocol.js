@@ -130,6 +130,7 @@ export default async function handler(req, res) {
       fees24h: baseFees || 'N/A',
       dataSource: 'Baseline',
       isStale: true,
+      isFallback: true,
       fetchedAt: Date.now(),
     });
   }
@@ -140,11 +141,6 @@ export default async function handler(req, res) {
   try {
     const llamaData = await Promise.race([fetchLlamaData(slug), timeout(12000)]);
     if (llamaData) {
-      // Top up missing stats with baseline values
-      if (!isValuable(llamaData.tvl)) llamaData.tvl = baseTvl || 'N/A';
-      if (!isValuable(llamaData.mantleTvl)) llamaData.mantleTvl = baseTvl || 'N/A';
-      if (!isValuable(llamaData.fees24h)) llamaData.fees24h = baseFees || 'N/A';
-
       return res.status(200).json({
         ...llamaData,
         dataSource: 'DeFiLlama',
@@ -161,6 +157,7 @@ export default async function handler(req, res) {
     fees24h: baseFees || 'N/A',
     dataSource: 'Baseline',
     isStale: true,
+    isFallback: true,
     fetchedAt: Date.now(),
   });
 }

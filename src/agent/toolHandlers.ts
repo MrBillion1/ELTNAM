@@ -1,8 +1,9 @@
 import { fetchProtocolData } from '../data/fetchProtocolData';
 import { MANTLE_PROJECTS } from '../lib/mantleProjects';
+import { getBridgeQuote, getEarnVaults, trackTransferStatus } from '../bridge/lifiBridge';
 
 export async function executeToolCall(toolName: string, toolInput: any, walletAddress: string): Promise<any> {
-  console.log(`[ToolHandler] Executing ${toolName} for wallet: ${walletAddress}`);
+  console.log(`[ToolHandler] Executing ${toolName} for wallet: ${walletAddress}`, toolInput);
 
   switch (toolName) {
     case 'get_protocol_data': {
@@ -78,6 +79,58 @@ export async function executeToolCall(toolName: string, toolInput: any, walletAd
         action: toolInput.action,
         txHash: '0x9b7e...61f4',
         sponsoredGas: '0.04 MNT (Sponsored by paymaster)',
+      };
+    }
+
+    case 'lifi_get_bridge_quote': {
+      const quoteRes = await getBridgeQuote({
+        fromChain: toolInput.fromChain,
+        fromToken: toolInput.fromToken,
+        toToken: toolInput.toToken,
+        amountUSD: toolInput.amountUSD,
+        fromAddress: walletAddress || '0x0000000000000000000000000000000000000000',
+      });
+      return {
+        status: 'success',
+        ...quoteRes
+      };
+    }
+
+    case 'lifi_get_earn_vaults': {
+      const vaults = await getEarnVaults(toolInput.asset, toolInput.sortBy, toolInput.limit);
+      return {
+        status: 'success',
+        vaults
+      };
+    }
+
+    case 'lifi_compose_deposit': {
+      // Simulate cross-chain deposit with LI.FI Composer
+      const quote = await getBridgeQuote({
+        fromChain: toolInput.fromChain,
+        fromToken: toolInput.fromToken,
+        toToken: 'USDC', // assume deposit asset
+        amountUSD: toolInput.amountUSD,
+        fromAddress: walletAddress || '0x0000000000000000000000000000000000000000',
+      });
+      return {
+        status: 'success',
+        vaultAddress: toolInput.vaultAddress,
+        quote: quote.quote,
+        composerSteps: [
+          { name: 'Approve token spend', status: 'ready' },
+          { name: 'Initiate LI.FI bridging + deposit', status: 'ready' },
+          { name: 'Wait for Mantle execution confirmation', status: 'ready' }
+        ]
+      };
+    }
+
+    case 'lifi_track_transfer': {
+      const transferStatus = await trackTransferStatus(toolInput.txHash, toolInput.fromChain);
+      return {
+        status: 'success',
+        txHash: toolInput.txHash,
+        transferStatus
       };
     }
 

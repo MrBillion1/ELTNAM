@@ -97,4 +97,68 @@ export const AGENT_TOOLS = [
       required: ['protocol', 'action', 'tokenIn', 'amountIn'],
     },
   },
+  {
+    name: 'lifi_get_bridge_quote',
+    description:
+      'Get the optimal bridge route and quote for moving tokens to Mantle. ' +
+      'Automatically selects between LI.FI Intents (stablecoins, exact output), ' +
+      'LayerZero OFT (mETH, MNT, USDY, FBTC), or LI.FI Classic aggregation. ' +
+      'Use when user wants to bridge assets from any chain to Mantle.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        fromChain: { type: 'string', description: 'Source chain name (e.g. ethereum, solana, arbitrum, base, optimism)' },
+        fromToken: { type: 'string', description: 'Source token symbol (e.g. USDC, USDT, ETH, SOL)' },
+        toToken: { type: 'string', description: 'Destination token on Mantle (e.g. USDC, mETH, USDY, MNT)' },
+        amountUSD: { type: 'number', description: 'Amount in USD to bridge' },
+      },
+      required: ['fromChain', 'fromToken', 'toToken', 'amountUSD'],
+    },
+  },
+  {
+    name: 'lifi_get_earn_vaults',
+    description:
+      'Discover yield-bearing vaults on Mantle via LI.FI Earn. ' +
+      'Returns top vaults sorted by APY with TVL data. ' +
+      'Use when user asks "where can I earn yield with my USDC on Mantle?" or similar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        asset: { type: 'string', description: 'Token symbol to filter vaults (e.g. USDC, mETH). Optional.' },
+        sortBy: { type: 'string', enum: ['apy', 'tvl'], default: 'apy' },
+        limit: { type: 'number', default: 5, description: 'Number of vaults to return' },
+      },
+    },
+  },
+  {
+    name: 'lifi_compose_deposit',
+    description:
+      'Execute a one-click cross-chain deposit into a Mantle DeFi vault via LI.FI Composer. ' +
+      'Handles bridging + depositing in one transaction. ' +
+      'Use when user wants to deposit into a specific protocol from another chain.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        fromChain: { type: 'string', description: 'Source chain' },
+        fromToken: { type: 'string', description: 'Source token' },
+        vaultAddress: { type: 'string', description: 'Mantle vault contract address from lifi_get_earn_vaults' },
+        amountUSD: { type: 'number', description: 'Amount in USD to deposit' },
+      },
+      required: ['fromChain', 'fromToken', 'vaultAddress', 'amountUSD'],
+    },
+  },
+  {
+    name: 'lifi_track_transfer',
+    description:
+      'Track the status of a LI.FI bridge transfer. ' +
+      'Returns: PENDING | DONE | FAILED with substatus details.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        txHash: { type: 'string', description: 'Transaction hash from bridge execution' },
+        fromChain: { type: 'string', description: 'Source chain name' },
+      },
+      required: ['txHash', 'fromChain'],
+    },
+  },
 ];

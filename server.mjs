@@ -17,6 +17,7 @@ import http from 'node:http';
 import { URL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { AGENT_TOOLS as SHARED_AGENT_TOOLS, executeToolCallJS as executeSharedToolCall } from './api/_agentCore.js';
 
 // Manually load .env on startup (no dotenv dependency needed)
 try {
@@ -167,11 +168,6 @@ async function resolveProtocolData(slug, address, name, baseTvl, baseFees) {
   if (slug) {
     const llamaData = await fetchLlamaData(slug);
     if (llamaData) {
-      // Top up missing or unvaluable stats with baseline values
-      if (!isValuable(llamaData.tvl)) llamaData.tvl = baseTvl || 'N/A';
-      if (!isValuable(llamaData.mantleTvl)) llamaData.mantleTvl = baseTvl || 'N/A';
-      if (!isValuable(llamaData.fees24h)) llamaData.fees24h = baseFees || 'N/A';
-
       console.log(`[API] Resolved ${name} via DeFiLlama API (TVL: ${llamaData.tvl}, Mantle: ${llamaData.mantleTvl})`);
       return llamaData;
     }
@@ -222,9 +218,507 @@ async function resolveProtocolData(slug, address, name, baseTvl, baseFees) {
     fees24h: fluctuatedFees,
     logoUrl,
     dataSource: source,
-    isStale: false,
+    isStale: true,
+    isFallback: true,
     fetchedAt: Date.now()
   };
+}
+
+const AGENT_TOOLS = [
+  {
+    name: 'bridge_tokens',
+    description: 'Bridges tokens to Mantle from another chain using LayerZero OFT endpoints.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sourceChain: { type: 'string', description: 'The chain to transfer assets from (e.g. Solana, Arbitrum, Base, Ethereum).' },
+        amount: { type: 'string', description: 'The quantity of tokens to bridge.' },
+        destinationToken: { type: 'string', description: 'The token to receive on Mantle (e.g. MNT, USDC, mETH).' },
+      },
+      required: ['sourceChain', 'amount', 'destinationToken'],
+    },
+  },
+  {
+    name: 'get_protocol_data',
+    description: 'Retrieves live TVL, fees, and metrics for a registered protocol using our 6-source waterfall API.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        protocolId: { type: 'number', description: 'The numeric ID of the protocol in the Mantle Ecosystem registry.' },
+      },
+      required: ['protocolId'],
+    },
+  },
+  {
+    name: 'execute_transaction',
+    description: 'Constructs and submits a gasless user operation (ERC-4337 Biconomy) on Mantle.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        protocol: { type: 'string', description: 'Name of target dApp.' },
+        action: { type: 'string', description: 'Action type (e.g. Swap, Supply, Stake, Borrow).' },
+        tokenIn: { type: 'string', description: 'Token contract address to supply.' },
+        amountIn: { type: 'string', description: 'Amount to trade/supply.' },
+        tokenOut: { type: 'string', description: 'Output token address if swapping.' },
+      },
+      required: ['protocol', 'action', 'tokenIn', 'amountIn'],
+    },
+  },
+  {
+    name: 'lifi_get_bridge_quote',
+    description:
+      'Get the optimal bridge route and quote for moving tokens to Mantle. ' +
+      'Automatically selects between LI.FI Intents (stablecoins, exact output), ' +
+      'LayerZero OFT (mETH, MNT, USDY, FBTC), or LI.FI Classic aggregation. ' +
+      'Use when user wants to bridge assets from any chain to Mantle.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        fromChain: { type: 'string', description: 'Source chain name (e.g. ethereum, solana, arbitrum, base, optimism)' },
+        fromToken: { type: 'string', description: 'Source token symbol (e.g. USDC, USDT, ETH, SOL)' },
+        toToken: { type: 'string', description: 'Destination token on Mantle (e.g. USDC, mETH, USDY, MNT)' },
+        amountUSD: { type: 'number', description: 'Amount in USD to bridge' },
+      },
+      required: ['fromChain', 'fromToken', 'toToken', 'amountUSD'],
+    },
+  },
+  {
+    name: 'lifi_get_earn_vaults',
+    description:
+      'Discover yield-bearing vaults on Mantle via LI.FI Earn. ' +
+      'Returns top vaults sorted by APY with TVL data. ' +
+      'Use when user asks "where can I earn yield with my USDC on Mantle?" or similar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        asset: { type: 'string', description: 'Token symbol to filter vaults (e.g. USDC, mETH). Optional.' },
+        sortBy: { type: 'string', enum: ['apy', 'tvl'], default: 'apy' },
+        limit: { type: 'number', default: 5, description: 'Number of vaults to return' },
+      },
+    },
+  },
+  {
+    name: 'lifi_compose_deposit',
+    description:
+      'Execute a one-click cross-chain deposit into a Mantle DeFi vault via LI.FI Composer. ' +
+      'Handles bridging + depositing in one transaction. ' +
+      'Use when user wants to deposit into a specific protocol from another chain.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        fromChain: { type: 'string', description: 'Source chain' },
+        fromToken: { type: 'string', description: 'Source token' },
+        vaultAddress: { type: 'string', description: 'Mantle vault contract address from lifi_get_earn_vaults' },
+        amountUSD: { type: 'number', description: 'Amount in USD to deposit' },
+      },
+      required: ['fromChain', 'fromToken', 'vaultAddress', 'amountUSD'],
+    },
+  },
+  {
+    name: 'lifi_track_transfer',
+    description:
+      'Track the status of a LI.FI bridge transfer. ' +
+      'Returns: PENDING | DONE | FAILED with substatus details.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        txHash: { type: 'string', description: 'Transaction hash from bridge execution' },
+        fromChain: { type: 'string', description: 'Source chain name' },
+      },
+      required: ['txHash', 'fromChain'],
+    },
+  },
+];
+
+const CHAIN_NAME_TO_ID = {
+  ethereum: 1,
+  mainnet: 1,
+  arbitrum: 42161,
+  'arbitrum one': 42161,
+  base: 8453,
+  optimism: 10,
+  polygon: 137,
+  bsc: 56,
+  'bnb smart chain': 56,
+  solana: 1151111081099710,
+  mantle: 5000,
+};
+
+function getChainId(chainName) {
+  const clean = (chainName || '').toLowerCase().trim();
+  return CHAIN_NAME_TO_ID[clean] || 1;
+}
+
+async function executeToolCallJS(toolName, toolInput, address) {
+  console.log(`[ToolHandlerJS] Executing ${toolName} for wallet: ${address}`, toolInput);
+
+  switch (toolName) {
+    case 'get_protocol_data': {
+      return executeSharedToolCall(toolName, toolInput, address);
+    }
+    
+    case 'bridge_tokens': {
+      return {
+        status: 'success',
+        sourceChain: toolInput.sourceChain,
+        destinationChain: 'Mantle',
+        amount: toolInput.amount,
+        txHash: '0x9a7f...d890',
+        quoteFees: '0.0021 ETH',
+      };
+    }
+
+    case 'get_smart_money_flows': {
+      return {
+        status: 'success',
+        tokenAddress: toolInput.tokenAddress,
+        smartMoneyNetFlow: '+$1.48M (Last 24h inflows)',
+        holdingConcentration: 'Top 50 holders hold 42.1%',
+      };
+    }
+
+    case 'get_protocol_risk': {
+      return {
+        status: 'success',
+        riskScore: 3,
+        auditsCount: 2,
+        unresolvedIssues: 0,
+        verdict: 'Audited and secure. High TVL backing.',
+      };
+    }
+
+    case 'get_protocol_tweets': {
+      return {
+        status: 'success',
+        sentiment: 'Highly Positive (89% bullish index)',
+        totalVolume: '2,400 mentions last 24h',
+        tweets: [
+          { text: 'Merchant Moe has hit an all-time high TVL of $98M!', sentiment: 'positive' },
+        ],
+      };
+    }
+
+    case 'get_protocol_discord_updates': {
+      return {
+        status: 'success',
+        highSignalAnnouncements: [
+          { content: 'Strategy upgrade deployed successfully on Mantle.', channel: '#announcements', date: '3h ago' },
+        ],
+      };
+    }
+
+    case 'search_mantle_ecosystem_tweets': {
+      return {
+        status: 'success',
+        query: toolInput.query,
+        mentions24h: 1240,
+        sentiment: 'Bullish',
+      };
+    }
+
+    case 'execute_transaction': {
+      return {
+        status: 'success',
+        protocol: toolInput.protocol,
+        action: toolInput.action,
+        txHash: '0x9b7e...61f4',
+        sponsoredGas: '0.04 MNT (Sponsored by paymaster)',
+      };
+    }
+
+    case 'lifi_get_bridge_quote': {
+      const fromToken = (toolInput.fromToken || '').toUpperCase();
+      const toToken = (toolInput.toToken || '').toUpperCase();
+      const fromChain = (toolInput.fromChain || '').toLowerCase();
+      const amountUSD = Number(toolInput.amountUSD) || 100;
+      
+      const OFT_TOKENS = new Set(['METH', 'MNT', 'USDY', 'FBTC']);
+      const INTENTS_TOKENS = new Set(['USDC', 'USDT', 'DAI', 'USDC.E', 'USDT.E']);
+      
+      let strategy = 'CLASSIC';
+      let label = 'LI.FI Aggregated Route';
+      let description = 'Best available route across bridges and DEXs. May include a swap.';
+      let icon = '🔀';
+      let estimatedTime = '30 seconds – 5 minutes';
+      
+      if (OFT_TOKENS.has(fromToken) || OFT_TOKENS.has(toToken)) {
+        strategy = 'OFT';
+        label = 'LayerZero OFT';
+        description = 'Burn on source, mint on Mantle. Trust-minimised via DVN attestation.';
+        icon = '🔥';
+        estimatedTime = '30–60 seconds';
+      } else if (INTENTS_TOKENS.has(fromToken) || INTENTS_TOKENS.has(toToken)) {
+        strategy = 'INTENTS';
+        label = 'LI.FI Intents';
+        description = 'Solver pre-funds exact output on Mantle. Near-instant, zero slippage.';
+        icon = '⚡';
+        estimatedTime = '5–15 seconds';
+      }
+
+      const isStable = ['USDC', 'USDT', 'DAI'].includes(fromToken);
+      const decimals = isStable ? 6 : 18;
+      let tokenAmount = amountUSD;
+      if (fromToken === 'ETH' || fromToken === 'WETH') {
+        tokenAmount = amountUSD / 2500;
+      }
+      const fromAmountRaw = Math.floor(tokenAmount * Math.pow(10, decimals)).toString();
+
+      if (strategy === 'OFT') {
+        return {
+          status: 'success',
+          strategy: { strategy, label, description, icon, estimatedTime },
+          useOFT: true,
+          quote: {
+            tool: 'LayerZero OFT',
+            estimate: {
+              toAmount: fromAmountRaw,
+              executionDuration: 45,
+              feeCosts: [{ amountUSD: '0.05', name: 'LayerZero DVN Fee' }]
+            }
+          }
+        };
+      }
+
+      if (strategy === 'INTENTS') {
+        return {
+          status: 'success',
+          strategy: { strategy, label, description, icon, estimatedTime },
+          useOFT: false,
+          quote: {
+            tool: 'lifi-intents',
+            orderId: 'intent_' + Math.random().toString(36).substring(2, 12),
+            estimate: {
+              toAmount: (amountUSD * 0.999).toString(),
+              executionDuration: 12,
+              feeCosts: [{ amountUSD: '0.12', name: 'Solver Gas Fee' }]
+            },
+            action: {
+              fromChainId: getChainId(fromChain),
+              toChainId: 5000,
+              fromToken,
+              toToken,
+            }
+          }
+        };
+      }
+
+      return {
+        status: 'success',
+        strategy: { strategy, label, description, icon, estimatedTime },
+        useOFT: false,
+        quote: {
+          tool: 'connext',
+          estimate: {
+            toAmount: (amountUSD * 0.992).toString(),
+            executionDuration: 180,
+            feeCosts: [{ amountUSD: '1.20', name: 'Bridge + Gas Fee' }]
+          },
+          action: {
+            fromChainId: getChainId(fromChain),
+            toChainId: 5000,
+            fromToken,
+            toToken,
+          },
+          transactionRequest: {
+            to: '0x1234567890123456789012345678901234567890',
+            data: '0x095ea7b3000000000000000000000000' + address.replace('0x', ''),
+            value: '0',
+          }
+        }
+      };
+    }
+
+    case 'lifi_get_earn_vaults': {
+      return {
+        status: 'success',
+        vaults: [
+          {
+            address: '0x7b58...12c4',
+            slug: 'merchant-moe-usdt-usdc',
+            protocol: { name: 'Merchant Moe' },
+            underlyingTokens: [{ symbol: 'USDT' }, { symbol: 'USDC' }],
+            analytics: { apy: { total: 0.124 } },
+            tvl: { usd: 1240000 },
+          },
+          {
+            address: '0x1c89...bc90',
+            slug: 'meth-double-gain',
+            protocol: { name: 'mETH Protocol' },
+            underlyingTokens: [{ symbol: 'mETH' }],
+            analytics: { apy: { total: 0.072 } },
+            tvl: { usd: 85200000 },
+          },
+          {
+            address: '0x321a...fb40',
+            slug: 'init-capital-usdc-supply',
+            protocol: { name: 'INIT Capital' },
+            underlyingTokens: [{ symbol: 'USDC' }],
+            analytics: { apy: { total: 0.051 } },
+            tvl: { usd: 18400000 },
+          },
+          {
+            address: '0xondo...usdy',
+            slug: 'ondo-finance-usdy',
+            protocol: { name: 'ONDO Finance' },
+            underlyingTokens: [{ symbol: 'USDY' }],
+            analytics: { apy: { total: 0.0505 } },
+            tvl: { usd: 35000000 },
+          }
+        ]
+      };
+    }
+
+    case 'lifi_compose_deposit': {
+      return {
+        status: 'success',
+        vaultAddress: toolInput.vaultAddress,
+        composerSteps: [
+          { name: 'Approve token spend', status: 'ready' },
+          { name: 'Initiate LI.FI bridging + deposit', status: 'ready' },
+          { name: 'Wait for Mantle execution confirmation', status: 'ready' }
+        ]
+      };
+    }
+
+    case 'lifi_track_transfer': {
+      return {
+        status: 'success',
+        txHash: toolInput.txHash,
+        transferStatus: 'DONE'
+      };
+    }
+
+    default:
+      throw new Error(`Unsupported tool call: ${toolName}`);
+  }
+}
+
+async function streamAnthropicCall(messages, systemPrompt, anthropicKey, res, address, depth = 0) {
+  if (depth > 5) {
+    res.write(`data: ${JSON.stringify({ text: "\n⚠️ Tool loop depth exceeded limit." })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': anthropicKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1024,
+      stream: true,
+      system: systemPrompt,
+      messages,
+      tools: SHARED_AGENT_TOOLS,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || `Anthropic stream failed with code ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  
+  let currentText = '';
+  let toolCalls = [];
+  let currentToolCall = null;
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const payload = line.slice(6).trim();
+      if (payload === '[DONE]') continue;
+      try {
+        const parsed = JSON.parse(payload);
+        
+        if (parsed.type === 'content_block_start') {
+          if (parsed.content_block?.type === 'tool_use') {
+            currentToolCall = {
+              id: parsed.content_block.id,
+              name: parsed.content_block.name,
+              inputStr: ''
+            };
+          }
+        } else if (parsed.type === 'content_block_delta') {
+          if (parsed.delta?.type === 'text_delta') {
+            const txt = parsed.delta.text;
+            currentText += txt;
+            res.write(`data: ${JSON.stringify({ text: txt })}\n\n`);
+          } else if (parsed.delta?.type === 'input_json_delta') {
+            if (currentToolCall) {
+              currentToolCall.inputStr += parsed.delta.partial_json;
+            }
+          }
+        } else if (parsed.type === 'content_block_stop') {
+          if (currentToolCall) {
+            try {
+              currentToolCall.input = JSON.parse(currentToolCall.inputStr || '{}');
+            } catch (e) {
+              currentToolCall.input = {};
+            }
+            toolCalls.push(currentToolCall);
+            currentToolCall = null;
+          }
+        }
+      } catch (err) {
+        // Ignore JSON parse error
+      }
+    }
+  }
+
+  if (toolCalls.length > 0) {
+    const assistantContent = [];
+    if (currentText) {
+      assistantContent.push({ type: 'text', text: currentText });
+    }
+    for (const tc of toolCalls) {
+      assistantContent.push({
+        type: 'tool_use',
+        id: tc.id,
+        name: tc.name,
+        input: tc.input
+      });
+      res.write(`data: ${JSON.stringify({ toolCall: { name: tc.name, input: tc.input } })}\n\n`);
+    }
+    
+    const nextMessages = [...messages, { role: 'assistant', content: assistantContent }];
+    const toolResults = [];
+    
+    for (const tc of toolCalls) {
+      let resultVal;
+      try {
+        resultVal = await executeSharedToolCall(tc.name, tc.input, address);
+      } catch (err) {
+        resultVal = { status: 'error', error: err.message };
+      }
+      
+      res.write(`data: ${JSON.stringify({ toolResult: { name: tc.name, input: tc.input, result: resultVal } })}\n\n`);
+      
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: tc.id,
+        content: JSON.stringify(resultVal)
+      });
+    }
+    
+    nextMessages.push({ role: 'user', content: toolResults });
+    await streamAnthropicCall(nextMessages, systemPrompt, anthropicKey, res, address, depth + 1);
+  } else {
+    res.end();
+  }
 }
 
 /**
@@ -315,6 +809,26 @@ async function handleRequest(req, res) {
         }
       }
 
+      if (fees24h === 'N/A') {
+        try {
+          const revenueRes = await fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyRevenue');
+          if (revenueRes.ok) {
+            const rd = await revenueRes.json();
+            if (typeof rd?.total24h === 'number' && rd.total24h > 0) {
+              fees24h = formatFee(rd.total24h);
+            } else if (Array.isArray(rd?.protocols)) {
+              const sum = rd.protocols.reduce(
+                (acc, p) => acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0),
+                0
+              );
+              if (sum > 0) fees24h = formatFee(sum);
+            }
+          }
+        } catch (revenueErr) {
+          console.warn('[API] /api/chain-stats revenue fallback error:', revenueErr.message);
+        }
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         chainTvl: chainTvlStr,
@@ -332,7 +846,7 @@ async function handleRequest(req, res) {
         chainTvlChange: '-0.01%',
         ecosystemTvl: '$156.2M',
         ecosystemTvlChange: '-0.01%',
-        fees24h: '$32.9K',
+        fees24h: 'N/A',
         fetchedAt: Date.now(),
       }));
     }
@@ -510,45 +1024,9 @@ async function handleRequest(req, res) {
           { role: 'user', content: message },
         ];
 
-        const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': ANTHROPIC_KEY,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-5',
-            max_tokens: 1024,
-            stream: true,
-            system: `You are the Mantle Ecosystem Agent — an elite guide for the Mantle L2 network (Chain ID: 5000). User wallet: ${address}. User balance: ${balance} MNT. Be concise, data-backed, and risk-aware. Never expose API keys. Risk score every recommendation 1-10.`,
-            messages,
-          }),
-        });
-
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
-
-        const reader = anthropicRes.body.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const payload = line.slice(6).trim();
-            if (payload === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(payload);
-              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-                res.write(`data: ${JSON.stringify({ text: parsed.delta.text })}\n\n`);
-              }
-            } catch { /* skip malformed SSE lines */ }
-          }
-        }
-        res.end();
+        const systemPrompt = `You are the Mantle Ecosystem Agent — an elite guide for the Mantle L2 network (Chain ID: 5000). User wallet: ${address}. User balance: ${balance} MNT. Be concise, data-backed, and risk-aware. Never expose API keys. Risk score every recommendation 1-10.`;
+        await streamAnthropicCall(messages, systemPrompt, ANTHROPIC_KEY, res, address);
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
