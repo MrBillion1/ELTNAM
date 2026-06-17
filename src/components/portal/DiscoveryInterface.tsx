@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import {
   X,
@@ -142,78 +142,19 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   const t = TRANSLATIONS[language];
 
   // --- Privy auth ---
-  const { login: privyLogin, logout: privyLogout, authenticated: privyAuthenticated } = usePrivy();
+  const { login: privyLogin, logout: privyLogout, authenticated } = usePrivy();
   const { wallets: privyWallets } = useWallets();
-
-  // Mock fallback ONLY used when Privy is completely unavailable (e.g. sandbox env without a valid App ID)
-  const [mockUser, setMockUser] = useState<any>(null);
-  const [mockWallets, setMockWallets] = useState<any[]>([]);
-  const mockTriggeredRef = useRef(false);
-  // Timer-based fallback: if authenticated but wallets still empty after 1.5s, inject mock EVM wallet
-  const walletWaitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Real auth state wins. Mock only fills in if Privy never authenticated.
-  const authenticated = privyAuthenticated || !!mockUser;
-  const wallets = privyWallets.length > 0 ? privyWallets : mockWallets;
+  const wallets = privyWallets;
   // Use any EVM wallet returned by Privy (could be embedded or injected)
   const evmWallet = wallets.find((w) => (w as any).chainType === 'ethereum') ?? wallets[0] ?? null;
 
-  // Fix: if Privy authenticated but wallets hook is still empty, inject mock after brief delay
-  useEffect(() => {
-    if (privyAuthenticated && privyWallets.length === 0 && !mockUser) {
-      walletWaitRef.current = setTimeout(() => {
-        if (privyWallets.length === 0 && !mockTriggeredRef.current) {
-          mockTriggeredRef.current = true;
-          const dummyWallet = {
-            address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-            chainType: 'ethereum',
-            connectorType: 'embedded',
-          };
-          setMockWallets([dummyWallet]);
-          setPortalState({ wallets: [dummyWallet] as any });
-        }
-      }, 1500);
-    }
-    if (privyWallets.length > 0) {
-      if (walletWaitRef.current) clearTimeout(walletWaitRef.current);
-      setMockWallets([]);
-      mockTriggeredRef.current = false;
-    }
-  }, [privyAuthenticated, privyWallets.length, mockUser, setPortalState]);
-
   const login = () => {
-    mockTriggeredRef.current = false;
     try {
       privyLogin();
     } catch (err) {
       console.warn('Privy login error:', err);
     }
-    // Fallback mock: fires if Privy never sets authenticated after 2.5s
-    setTimeout(() => {
-      if (!privyAuthenticated && !mockTriggeredRef.current) {
-        mockTriggeredRef.current = true;
-        const dummyWallet = {
-          address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-          chainType: 'ethereum',
-          connectorType: 'embedded',
-        };
-        setMockUser({ id: 'mock-user-id' });
-        setMockWallets([dummyWallet]);
-        setPortalState({
-          user: { id: 'mock-user-id' } as any,
-          wallets: [dummyWallet] as any,
-        });
-      }
-    }, 2500);
   };
-
-  // Clear mock state when Privy actually authenticates with real wallets
-  useEffect(() => {
-    if (privyAuthenticated && privyWallets.length > 0 && mockUser) {
-      setMockUser(null);
-      setMockWallets([]);
-    }
-  }, [privyAuthenticated, privyWallets.length, mockUser]);
 
   const logout = () => {
     try {
@@ -221,9 +162,6 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     } catch (err) {
       console.warn(err);
     }
-    mockTriggeredRef.current = false;
-    setMockUser(null);
-    setMockWallets([]);
     setPortalState({ user: null, wallets: [] });
   };
 

@@ -1,0 +1,818 @@
+MANTLE ECOSYSTEM
+ AGENTIC PORTAL — v5
+ Intent-Driven Cross-Chain Onboarding · Dual-Interface UX · LayerZero OFT
+ 6-Source Data Waterfall · X + Discord Social Intelligence
+NEW v5: Privy Social Auth · Embedded Wallets · Zero-Friction Web2→Web3 Onboarding
+ Auto Network Switch — No Warning C, No Manual Steps, No Extra Screens
+Turing Hackathon
+v5 Final
+May 2026
+ Generated: May 26, 2026
+
+TABLE OF CONTENTS
+1. Project Vision & Philosophy
+2. What We Found on mantle.xyz/ecosystem
+3. Full 242-Project Registry by Category
+4. Ecosystem Category Architecture
+5. Privy Integration — Full Architecture
+5.1 What Privy Is and Why It Was Chosen
+5.2 Privy Security Model (2-of-3 Shamir SSS + TEE)
+5.3 All 15+ Supported Auth Methods
+5.4 PrivyProvider Configuration for Mantle
+6. Onboarding State Machine — 3 Screens, No Network Screen
+6.1 Design Principle: Network Switching Is Infrastructure, Not UX
+6.2 Screen 0 — Welcome
+6.3 Screen 1 — Social Login
+6.4 Screen 2 — Wallet + Funding Check
+7. useAutoSwitchToMantle — The Core Hook ← KEY
+7.1 How It Works
+7.2 Full Hook Implementation
+7.3 Edge Cases and Fallbacks
+8. Warning System — Only 2 Warnings (A and B)
+8.1 Warning A: No EVM Wallet (Solana-only)
+8.2 Warning B: Empty Wallet — You Need Assets
+8.3 What Was Removed — No Warning C
+8.4 Funding Options (4 On-Ramps + Bridge + CEX)
+9. Privy Hook Reference
+10. Complete Component Code Reference
+11. New User Onboarding — Full Cross-Chain Flow
+12. LayerZero OFT + Paymaster (Reference)
+13. Dual-Interface UX + Data + Social Intelligence (Reference)
+14. Installation & Antigravity Setup
+15. Enhancement Roadmap
+16. Troubleshooting & Support
+
+1. PROJECT VISION & PHILOSOPHY
+The Mantle Agentic Portal exists to make every person on earth able to access Mantle DeFi —
+regardless of crypto experience. v5 achieves the deepest onboarding simplification yet: the portal never
+asks a user to change their network. It does it for them, silently, the moment a wallet connects.
+Intent over instruction: Natural language → agent routing, bridging, approvals, execution. Users
+state goals, not steps.
+Zero crypto prerequisite: Social login → embedded wallet auto-created. No MetaMask, no seed
+phrases, no extensions required.
+Network is infrastructure: Switching to Mantle happens silently in a background hook. It is never
+surfaced as a user decision or warning.
+Guided funding only when needed: If wallet is empty, portal shows funding options. If wallet is on
+the wrong chain, it self-corrects without user involvement.
+Chain-agnostic entry: Solana, EVM, Bitcoin wallets all supported via Privy. Non-EVM users are
+guided to add an EVM wallet — that is the only chain-related prompt.
+Gasless first experience: Paymaster covers first transactions. Empty-wallet users can still enter
+and explore.
+
+2. WHAT WE FOUND ON mantle.xyz/ecosystem
+Scraped from https://www.mantle.xyz/ecosystem — the authoritative dApp registry.
+Metric
+Value
+Total dApps
+242
+Featured projects
+26
+Category filters
+16
+Official X
+x.com/Mantle_Official
+Official Discord
+discord.com/invite/0xMantle
+Category Counts
+Category
+Count
+Portal ID
+DEX & AMM (incl. Aggregator)
+56+
+dex
+Dev Tool / Infrastructure
+29+
+infra
+Lending + Money Market
+24
+lending
+Wallet / Custody
+16
+wallet
+Bridge & Cross-Chain
+12
+bridge
+Games & NFT
+12+
+gaming
+Vault / Yield
+10
+yield
+Oracle
+6
+oracle
+RWA / Synthetic
+5+
+rwa
+DAO + Social
+7+
+dao
+On-Ramp / Fiat
+3
+fiat
+
+3. FULL 242-PROJECT REGISTRY — FEATURED
+PROJECTS
+Project
+Category
+URL
+Badge
+INIT Capital
+Lending
+init.capital
+Featured, EcoFund
+Merchant Moe
+DEX
+merchantmoe.com
+Featured, EcoFund
+Vertex
+Derivatives
+vertexprotocol.com
+Featured, Official
+mETH Protocol
+Liquid Staking
+meth.mantle.xyz
+Featured
+ONDO Finance
+RWA
+ondo.finance
+Featured
+Ethena
+RWA / Synthetic
+ethena.fi
+Featured, EcoFund
+AGORA (AUSD)
+Stablecoins
+agora.finance
+Featured, EcoFund, Official
+IntentX
+Derivatives
+intentx.io
+Featured, EcoFund
+Stargate
+Bridge
+stargate.finance
+Featured
+Pendle
+Yield
+pendle.finance
+Featured
+Arkham
+Analytics
+intel.arkm.com
+Featured, Official
+TsunamiX
+Perps
+tsunami.finance
+Featured, EcoFund
+MethLab
+Lending
+methlab.xyz
+Featured
+funny.money
+DEX
+funny.money
+Featured, Official
+Layer3
+Social
+layer3.xyz
+Featured, Official
+Galxe
+Social
+galxe.com
+Featured, Official
+Hyperlane
+Bridge/Dev
+hyperlane.xyz
+Featured, Official
+FBTC
+BTC Asset
+fbtc.com
+Featured
+Catizen
+Games
+catizen.ai
+Featured, EcoFund
+MetaCene
+Games
+metacene.io
+Featured, EcoFund
+
+4. ECOSYSTEM CATEGORY ARCHITECTURE
+Portal Category
+mantle.xyz Labels
+Icon
+Approx Count
+All
+All
+■
+242+
+DEX & AMM
+DEX, Aggregator, RFQ/Intents
+■
+58+
+Lending
+Lending, Money Market
+■
+24
+Derivatives
+Perpetual Futures, Intents
+■
+10+
+AI Agents
+(portal-exclusive)
+■
+Growing
+Liquid Staking
+Restaking, LST
+■
+3+
+Yield & Vaults
+Vault
+■
+10
+Bridges
+Bridge
+■
+12
+RWA & Stables
+RWA/Synthetic
+■
+8+
+Games & NFT
+Games, NFT Marketplace
+■
+12+
+Infrastructure
+Oracle, Node Provider, Dev Tool
+■■
+40+
+Social & Quests
+Social, DAO Tool
+■■
+10+
+
+5. PRIVY INTEGRATION — FULL ARCHITECTURE
+5.1 What Privy Is and Why It Was Chosen
+Privy is an embedded wallet and authentication SDK — acquired by Stripe in June 2025. It lets any user
+sign in with Google, Apple, Discord, email, or an existing wallet, and instantly receives a non-custodial
+EVM (and/or Solana) wallet — no seed phrases, no browser extensions, no friction. 100M+ wallets
+deployed across 1,500+ apps.
+No seed phrases ever: 2-of-3 Shamir Secret Sharing. User never sees a private key.
+Auto wallet on login: createOnLogin: 'users-without-wallets' provisions EVM + Solana wallets on
+first sign-in. Completely invisible to the user.
+15+ auth methods: Google, Apple, Twitter, Discord, email, SMS, passkey, MetaMask, Phantom,
+WalletConnect, Coinbase, Farcaster, Telegram.
+EVM + Solana in one SDK: Both chain types handled, with cross-chain account linking.
+Built-in funding UI: useFundWallet() opens a native on-ramp modal. Supplemented by direct
+on-ramp partner links.
+Stripe acquisition: Payment-rail integration with Stripe Checkout expected — card-to-DeFi in the
+most familiar checkout UI on earth.
+5.2 Privy Security Model
+Share
+Location
+Rule
+Device share
+User's browser (localStorage)
+Never leaves the browser unencrypted.
+Privy share
+Privy TEE infrastructure
+Privy cannot read it — even internally.
+Recovery share
+User passkey / iCloud / hardware key
+Used if device is lost. User-controlled.
+Any 2-of-3 reconstruct the key. Non-custodial: the portal and Privy cannot sign without the user.
+5.3 All 15+ Supported Auth Methods
+Method
+Type
+Privy Key
+Google
+Social OAuth
+'google'
+Apple
+Social OAuth
+'apple'
+Twitter / X
+Social OAuth
+'twitter'
+Discord
+Social OAuth
+'discord'
+GitHub
+Social OAuth
+'github'
+Email + OTP
+Email
+'email'
+SMS / Phone
+Phone
+'sms'
+Passkey
+Biometric
+'passkey'
+MetaMask
+External EVM
+'wallet'
+WalletConnect
+External EVM
+'wallet'
+Coinbase Wallet
+External EVM
+'wallet'
+Phantom
+External Solana
+'wallet'
+
+Backpack
+External Solana
+'wallet'
+Farcaster
+Web3 social
+'farcaster'
+Telegram
+Messaging
+'telegram'
+
+5.4 PrivyProvider Configuration for Mantle
+
+6. ONBOARDING STATE MACHINE — 3 SCREENS,
+NO NETWORK SCREEN
+6.1 Design Principle: Network Switching Is Infrastructure, Not UX
+This is the most important UX decision in the entire onboarding system. Network switching must never
+be a user decision, a warning, a CTA, or a screen. It is an invisible technical operation that the portal
+performs automatically the instant a wallet is connected.
+The user's mental model is: 'I connected my wallet → I am on Mantle.' They should never know or
+care what chain their wallet was previously on. The portal absorbs that complexity entirely.
+Analogy: when you connect to a new Wi-Fi network, your phone doesn't ask you 'are you sure you want
+to change networks?' and show a warning banner. It just connects. The Mantle portal treats network
+switching the same way.
+3-Screen State Machine (network switch removed as screen)
+Screen
+State Condition
+User Sees
+Triggered By
+0 — Welcome
+Not authenticated
+Hero, value props, Get Started CTA
+User arrives
+1 — Login
+Not authenticated
+7 social login buttons
+Tap Get Started
+2 — Wallet Check
+authenticated === true
+Wallet display, warnings A/B if needed
+Privy auth completes
+Portal
+EVM wallet + no blockers
+Full agentic portal
+Tap Enter Portal
+(background)
+Any EVM wallet connects
+Nothing (silent)
+useAutoSwitchToMantle hook
+6.2 Screen 0 — Welcome
+Web2-friendly. No crypto terminology. Three value props: no seed phrases, gas covered, any chain.
+Single CTA: 'Get Started'. The word 'wallet' does not appear on this screen.
+6.3 Screen 1 — Social Login
+7 auth method buttons, Google first (highest Web2 conversion rate). Each calls login({ loginMethods:
+[method] }). On success, Privy fires authenticated = true, which triggers the useEffect to advance to
+Screen 2. Embedded EVM and Solana wallets are created in the background during this same auth flow.
+6.4 Screen 2 — Wallet + Funding Check
+The only user-facing wallet screen. By the time this renders, useAutoSwitchToMantle has already fired
+(or is firing). The screen shows: the user's wallet(s), a subtle 'Connecting to Mantle…' spinner if the
+switch is in progress (not a warning — just ambient feedback), Warning A if Solana-only, Warning B if
+balance is zero. The Enter Portal button is available as soon as an EVM wallet exists.
+
+7. useAutoSwitchToMantle — THE CORE HOOK
+7.1 How It Works
+This hook is the single mechanism responsible for keeping every connected EVM wallet on Mantle at all
+times. It runs as a side effect, not as a UI flow:
+Trigger: Fires in a useEffect whenever the wallets array changes — specifically when any new
+wallet address appears.
+Per-wallet tracking: A useRef Set tracks which wallet addresses have already been switched. This
+prevents duplicate switchChain calls on re-renders.
+Silent chain read: Calls wallet.getChainId() first. If already on Mantle (5000), the wallet is logged as
+switched and the hook exits. No unnecessary RPC calls.
+Silent switch: Calls wallet.switchChain(5000) with no UI notification. Privy's embedded wallet
+switches instantly. External wallets (MetaMask, Coinbase) show their own native confirmation — this
+cannot be avoided for external wallets, but it is the wallet's own UI, not the portal's.
+Fallback on failure: If switchChain fails (e.g. hardware wallet, some restricted external wallets), the
+error is logged to console only. The user sees nothing. The portal still opens — they may need to
+switch manually inside Interface 2 if they hit a tx that requires it.
+Ambient status: The switching boolean returned by the hook drives a small inline 'Connecting to
+Mantle…' spinner in the wallet check screen. It is not a warning, not a blocker, not a CTA.
+7.2 Full Hook Implementation
+function useAutoSwitchToMantle(wallets, onSwitched) { const switched = useRef(new Set()); //
+addresses already handled const [switching, setSwitching] = useState(false); useEffect(() =>
+{ const evmWallets = wallets.filter(w => w.chainType === 'ethereum'); if
+(!evmWallets.length) return; const runSwitch = async () => { for (const wallet of
+evmWallets) { if (switched.current.has(wallet.address)) continue; // already done try {
+const currentChain = await wallet.getChainId?.().catch(() => null); if (currentChain ===
+MANTLE_CHAIN_ID) { // Already on Mantle — mark and move on
+switched.current.add(wallet.address); continue; } // Different chain — switch silently, no
+UI setSwitching(true); await wallet.switchChain(MANTLE_CHAIN_ID);
+switched.current.add(wallet.address); if (onSwitched) onSwitched(); } catch (err) { //
+Silent fail — log only, never surface to user console.warn('[Mantle Portal] Auto-switch
+failed for', wallet.address, '—', err.message); // Note: for external wallets (MetaMask
+etc.), Privy's switchChain() // calls wallet_switchEthereumChain on the extension. If the
+user // dismisses the MetaMask popup, this catch fires. We do not retry // or warn — the
+user's action (dismiss) is respected silently. } finally { setSwitching(false); } } };
+runSwitch(); // Dependency: re-run when wallet addresses change }, [wallets.map(w =>
+w.address).join(',')]); return { switching }; }
+7.3 Edge Cases and Fallbacks
+Scenario
+Hook Behaviour
+User Sees
+Wallet already on Mantle
+getChainId() returns 5000 → skip
+Nothing
+Embedded EVM wallet (Privy-managed)
+switchChain() succeeds instantly
+Tiny spinner for <1s
+MetaMask — user accepts switch
+MetaMask popup → user confirms → done
+MetaMask native popup (unavoidable)
+
+MetaMask — user dismisses popup
+catch fires → logged silently → no retry
+Nothing (silent)
+Hardware wallet (Ledger etc.)
+switchChain may fail → logged silently
+Nothing
+Wallet connect fails entirely
+Hook exits silently, portal still opens
+Nothing
+User connects second wallet later
+wallets dep changes → hook re-runs for new address only
+Tiny spinner if needed
+
+8. WARNING SYSTEM — ONLY 2 WARNINGS
+8.1 Warning A: No EVM Wallet (Solana-only user)
+Trigger: user has ≥1 Solana wallet and 0 EVM wallets.
+const hasOnlySolana = solWallets.length > 0 && evmWallets.length === 0; // Shows only when
+hasOnlySolana === true // Action button calls Privy's linkWallet() to add an EVM wallet. //
+Privy auto-creates an embedded EVM wallet if user has none. const { linkWallet } =
+usePrivy();
+Message: "■■ You also need an EVM wallet to access Mantle. You're connected with a Solana wallet. Mantle is
+EVM-compatible. Tap below to add one — it takes one tap. We'll bridge your Solana assets automatically once
+you're set up."
+8.2 Warning B: Empty Wallet — You Need Assets
+Trigger: user has ≥1 EVM wallet on Mantle, but its MNT balance is 0.
+// Balance polling — runs every 8 seconds so on-ramp reflects immediately const mantleClient
+= createPublicClient({ chain: mantleChain, transport: http(RPC) }); const balance = await
+mantleClient.getBalance({ address: evmWallet.address }); const isEmpty = balance === 0n;
+Message: "■■ You need assets to begin using Mantle. Your wallet is ready and on Mantle, but has no balance.
+Fund it to start using protocols — under 5 minutes. You can also skip and explore the portal first."
+8.3 What Was Removed — No Warning C
+Previous versions included a 'Warning C' for wrong network, a 'Network Detection' screen (Screen 3),
+and a manual 'Switch to Mantle' CTA button. All of these have been removed.
+Why they were wrong:
+Wrong network warning: Puts a technical infrastructure problem on the user's plate. They don't
+know what 'Arbitrum' or 'chain ID 5000' means. They shouldn't need to.
+Network Detection screen: An entire screen just to switch chains is extreme friction. It makes the
+portal feel like every other DeFi app that constantly asks you to switch networks.
+Manual 'Switch to Mantle' button: A CTA for something the portal can and should do automatically.
+Asking the user to tap a button for a background operation is false friction.
+The replacement: useAutoSwitchToMantle() — a silent background hook that handles the switch
+before Screen 2 even finishes rendering in most cases.
+The only reason a network warning could ever be justified is if switchChain() fails and the portal
+genuinely cannot proceed without user help. Even then, the correct response is a contextual message at
+the point of transaction failure, not a blocking warning banner at onboarding entry.
+8.4 Funding Options (4 On-Ramps + Bridge + CEX)
+Shown inside Warning B's funding drawer when the user taps 'Fund My Wallet':
+Provider
+URL
+Time
+Fee
+Best For
+Transak
+global.transak.com
+< 5 min
+1–2%
+Card + bank, 100+ countries, pre-fills wallet address
+Banxa
+banxa.com
+< 5 min
+1–3%
+130+ fiat currencies, global coverage
+
+Onramp.money
+onramp.money
+< 1 min
+~1%
+Fastest conversion, minimal steps
+Alchemy Pay
+alchemypay.org
+< 3 min
+1–2%
+Global gateway, 50+ fiat currencies
+Additionally: bridge-from-chain text card (agent handles intent) and CEX copy-address card (Binance /
+OKX / Bybit withdrawal). Transak URL includes {walletAddress} as a query param so the address is
+pre-filled — one fewer step for the user.
+
+9. PRIVY HOOK REFERENCE
+9.1 usePrivy
+const { ready, // boolean — SDK initialised (always wait for this) authenticated, // boolean
+— user is logged in user, // User object — id, email, google, twitter, wallet,
+linkedAccounts login, // fn(options?) — open login modal logout, // fn() — sign user out
+linkWallet, // fn() — add another wallet to user account createWallet, // fn() — manually
+create embedded wallet exportWallet, // fn() — let user export their private key } =
+usePrivy();
+9.2 useWallets
+const { wallets } = useWallets(); // wallet.address — public address // wallet.chainType —
+'ethereum' | 'solana' // wallet.walletClientType — 'privy' (embedded) | 'metamask' |
+'coinbase_wallet' | ... // wallet.getChainId() — current chain ID (async) //
+wallet.switchChain(id) — switch to chain (async, used by auto-switch hook) //
+wallet.getEthersProvider() — ethers.js provider // wallet.getWalletClient() — viem wallet
+client const evmWallets = wallets.filter(w => w.chainType === 'ethereum'); const solWallets
+= wallets.filter(w => w.chainType === 'solana'); const embeddedEVM = wallets.find(w =>
+w.walletClientType==='privy' && w.chainType==='ethereum');
+9.3 useFundWallet
+const { fundWallet } = useFundWallet(); await fundWallet(address, { chain: mantleChain,
+amount: '50', // suggested USD (optional) asset: 'native-currency', }); // Opens Privy's
+native funding modal: Coinbase Pay + MoonPay. // For Transak/Banxa/Onramp.money, open URLs
+with wallet address param instead.
+9.4 useEmbeddedWallet
+import { useEmbeddedWallet, isNotCreated, isConnected } from '@privy-io/react-auth'; const {
+state, createWallet } = useEmbeddedWallet(); // state.status: 'none' | 'not-created' |
+'connecting' | 'connected' | 'error' if (isNotCreated(state)) await createWallet(); if
+(isConnected(state)) console.log('Ready:', state.wallet.address);
+
+10. COMPLETE COMPONENT CODE REFERENCE
+The full component is in privy-mantle-onboarding.jsx (712 lines). Below is the structural summary and
+integration pattern.
+// File: privy-mantle-onboarding.jsx — structural overview // // Constants: //
+MANTLE_CHAIN_ID = 5000 // mantleChain = { id, name, nativeCurrency, rpcUrls, blockExplorers
+} // mantleClient = viem publicClient pointing at rpc.mantle.xyz // ONRAMP_OPTIONS =
+[Transak, Banxa, Onramp.money, Alchemy Pay] // AUTH_METHODS = [google, twitter, discord,
+apple, email, sms, wallet] // // Core hook (THE KEY PIECE): //
+useAutoSwitchToMantle(wallets, onSwitched) // → fires silently on wallet connect // →
+switches to Mantle with no user interaction // → returns { switching } for ambient spinner
+only // // Sub-components (presentational): // StepDots — 2-dot progress indicator //
+WarningBanner — orange / blue warning card (used for A and B only) // WalletBadge — address
+display + copy + green dot if on Mantle // NetworkStatusBar — tiny spinner shown while
+switching (NOT a warning) // OnrampCard — on-ramp provider link card // // Screens (3
+total): // WelcomeScreen — Web2 entry. No crypto terms. // LoginScreen — Social auth
+buttons. Calls usePrivy().login() // WalletCheckScreen — Warning A, Warning B, funding
+drawer, Enter Portal CTA // // Orchestrator: // MantlePrivyOnboarding — step state machine
+(0/1/2), Privy hooks, auto-switch // // Root export: // MantlePrivyRoot — PrivyProvider
+wrapper with full Mantle config
+App.jsx Integration
+import { useState } from 'react'; import MantlePrivyRoot from
+'./components/privy-mantle-onboarding'; import MantleAgenticPortal from
+'./components/mantle-agentic-portal'; export default function App() { const [ready,
+setReady] = useState(false); const [userWallets, setUserWallets] = useState([]); const
+[privyUser, setPrivyUser] = useState(null); return ready ? : { setUserWallets(wallets);
+setPrivyUser(user); setReady(true); }} />; }
+
+11. NEW USER ONBOARDING — FULL
+CROSS-CHAIN FLOW
+Step 1 — Visit portal
+Web2-friendly hero. No crypto terms. 'Get Started' CTA.
+Step 2 — Social login via Privy
+Google / Apple / Discord. EVM + Solana embedded wallets created in background.
+Step 3 — Auto-switch fires
+useAutoSwitchToMantle() runs silently. Wallet moves to Mantle. User sees a small spinner at most.
+Step 4 — Wallet Check screen renders
+Wallet shown on Mantle (green dot). Warning A if Solana-only. Warning B if empty.
+Step 5 — Fund wallet if needed
+Card on-ramp, bridge intent via agent, or CEX withdrawal. Balance polling updates live.
+Step 6 — Enter Portal
+One tap. No network screen. No network warning. Portal loads immediately.
+Step 7 — Drop bridge intent (if assets on other chain)
+'Bridge $100 from Solana to mETH'. Agent routes via LayerZero OFT. Paymaster covers gas.
+Step 8 — Explore ecosystem
+Agent-guided discovery. DeFi Llama + X + Discord intelligence. 242 projects from mantle.xyz.
+Step 9 — Use dApp (Interface 2)
+Embedded dApp, agent co-pilot, intent execution. Everything on Mantle.
+
+12-13. LAYERZERO, PAYMASTER, DATA, SOCIAL,
+AGENT (REFERENCE)
+Component
+Technology
+Documented In
+LayerZero OFT Bridge
+@layerzerolabs/lz-evm-sdk
+v3 PDF Section 4
+ERC-4337 Paymaster
+@biconomy/account
+v3 PDF Section 5
+Dual-Interface UX
+React state machine + iframe
+v3 PDF Section 6
+DeFi Llama + 6 fallbacks
+DeFiLlama→Dune→Graph→Nansen→Mobula→Messari
+v4 PDF Section 10
+X (Twitter) Scraping
+X API v2 + Apify scraper
+v4 PDF Section 11
+Discord Scraping
+discord.js + Redis
+v4 PDF Section 12
+Claude Streaming Agent
+claude-sonnet-4-20250514, 8 tools
+v4 PDF Section 13
+
+14. INSTALLATION & ANTIGRAVITY SETUP (v5)
+14.1 Dependencies
+Package
+Version
+Purpose
+@privy-io/react-auth
+^3.14.1
+Social auth + embedded wallets (HTTPS required)
+react
+^18.3
+Core UI
+viem
+^2.x
+Mantle RPC client, balance checks, chain switching
+lucide-react
+^0.383
+Icons (Loader, Shield, AlertTriangle, etc.)
+tailwindcss
+^3.4
+Utility CSS
+@layerzerolabs/lz-evm-sdk
+^3.0
+OFT bridging
+@biconomy/account
+^4.1
+ERC-4337 Paymaster
+wagmi
+^2.x
+Additional EVM utilities
+@solana/wallet-adapter-react
+^0.15
+Solana external wallets
+discord.js
+^14.x
+Discord community bot
+ioredis
+^5.x
+Redis cache for Discord messages
+@duneanalytics/client-sdk
+^1.x
+Dune Analytics fallback
+apify-client
+^2.x
+Apify Twitter scraper
+14.2 Environment Variables
+# Privy (REQUIRED FIRST) REACT_APP_PRIVY_APP_ID=clxxxxxxxxxxxxxxxx # from dashboard.privy.io
+# ■ HTTPS required — Privy's Web Crypto API silently breaks on plain http:// # localhost is
+exempt. All deployments must use HTTPS. REACT_APP_MANTLE_RPC=https://rpc.mantle.xyz
+MANTLE_CHAIN_ID=5000 REACT_APP_WALLETCONNECT_PROJECT_ID=...
+REACT_APP_ANTHROPIC_API_KEY=sk-ant-...
+REACT_APP_BICONOMY_PAYMASTER_URL=https://paymaster.biconomy.io/api/v2/...
+REACT_APP_LAYERZERO_APP_ID=... DUNE_API_KEY=... GRAPH_API_KEY=... NANSEN_API_KEY=...
+MOBULA_API_KEY=... MESSARI_API_KEY=... TWITTER_BEARER_TOKEN=... APIFY_TOKEN=...
+DISCORD_BOT_TOKEN=... REDIS_URL=redis://localhost:6379
+14.3 Antigravity Steps
+1. Create React workspace in Antigravity.
+2. Paste privy-mantle-onboarding.jsx and mantle-agentic-portal.jsx into components/.
+3. Update App.jsx: MantlePrivyRoot → onComplete → MantleAgenticPortal (Section 10 code).
+4. Add all packages via Antigravity package manager.
+5. Critical: Ensure HTTPS (or localhost). Privy silently breaks on http:// — no error message.
+6. Set REACT_APP_PRIVY_APP_ID from dashboard.privy.io (free account).
+7. Add Tailwind directives to index.css.
+8. Run dev server. Test Google login → embedded wallet auto-creates.
+9. Verify Screen 2: wallet shown → balance check runs → funding options appear if empty.
+10. Verify no network warning anywhere — wallet should be on Mantle automatically.
+
+11. Deploy to HTTPS before demoing Privy to stakeholders.
+
+15. ENHANCEMENT ROADMAP
+Phase
+Milestone
+Features
+Timeline
+0 — Now
+Hackathon MVP
+Privy social auth, embedded wallet, auto-switch, warning A/B, mock portal
+Day 1-3
+1 — Alpha
+Live Auth + Data
+Privy on HTTPS, DeFi Llama live, balance polling, on-ramp deep-links
+Day 4-7
+2 — Beta
+Bridge + Funding
+LayerZero OFT, Paymaster, Transak/Banxa, real mETH/USDY minting
+Week 2
+3 — V1
+Full Portal
+Interface 2, X + Discord intelligence, all 242 projects from mantle.xyz
+Week 3-4
+4 — V2
+Scale + Stripe
+Stripe/Privy card-to-DeFi, smart account batching, portfolio tracking
+Month 2
+5 — V3
+Autonomous
+Proactive agent alerts, mobile app (React Native + Privy)
+Month 3+
+
+16. TROUBLESHOOTING & SUPPORT (v5)
+16.1 Auto-Switch Issues
+Issue: Auto-switch doesn't fire on MetaMask connect
+MetaMask external wallets require the user to confirm the chain switch in their extension popup. The
+hook calls switchChain() correctly, but MetaMask shows its own native popup. This is unavoidable for
+external wallets — it is the browser extension's security model. For embedded Privy wallets, the switch is
+fully silent and instant. Encourage users to use the embedded wallet (auto-created on social login) for
+the smoothest experience.
+Issue: Auto-switch fires but wallet still shows wrong chain
+The wallet address may already be in the switched Set from a previous session. Clear the Set reference
+by calling switched.current.clear() on logout, or key the Set on user ID rather than just wallet address.
+Issue: switching stays true indefinitely
+The setSwitching(false) call is in the finally block and should always fire. Check for an unhandled
+promise rejection that bypasses the finally. Add a safety timeout: setTimeout(() => setSwitching(false),
+5000) as a fallback.
+Issue: getChainId() returns null for new embedded wallet
+Privy's embedded wallet may not expose getChainId() immediately after creation. Add .catch(() => null)
+as shown in the hook code and proceed to switchChain() directly — it is safe to call even if the current
+chain is unknown.
+16.2 Privy Issues
+Issue: Privy silently breaks — wallets don't work
+You are on http:// not HTTPS. Privy's Web Crypto API (key sharding) requires a secure context.
+localhost is exempt. All other hosts must use HTTPS. This produces no error message.
+Issue: Embedded wallet not created after login
+Check createOnLogin: 'users-without-wallets' in PrivyProvider config and in the Privy dashboard under
+your app's Embedded Wallets settings.
+Issue: useWallets() returns []
+Wait for ready === true from usePrivy() before relying on wallet data.
+Issue: WalletConnect not working
+Privy does not include WalletConnect by default. Install with the WalletConnect connector and provide
+REACT_APP_WALLETCONNECT_PROJECT_ID.
+16.3 All Key Resources
+ Privy Dashboard: https://dashboard.privy.io
+ Privy React Quickstart: https://docs.privy.io/basics/react/quickstart
+ Privy useWallets: https://docs.privy.io/wallets/wallets/get-a-wallet/get-connected-wallet
+
+ Privy useFundWallet: https://docs.privy.io/wallets/embedded/funding
+ Privy Solana: https://privy.io/blog/solana-support
+ Transak: https://transak.com | Banxa: https://banxa.com | Onramp.money: https://onramp.money
+ Mantle Ecosystem: https://www.mantle.xyz/ecosystem (242 projects)
+ Mantle Discord: https://discord.com/invite/0xMantle
+ LayerZero OFT: https://docs.layerzero.network/v2/developers/evm/oft/quickstart
+ Biconomy Paymaster: https://docs.biconomy.io/paymaster
+ Anthropic API: https://docs.anthropic.com
+ DeFi Llama API: https://defillama.com/docs/api
+ Dune Analytics: https://docs.dune.com
+ The Graph: https://thegraph.com/docs
+ Nansen: https://docs.nansen.ai | Mobula: https://docs.app.mobula.io
+ X API v2: https://developer.twitter.com/en/docs/twitter-api
+ discord.js: https://discord.js.org
+ Mantle Docs: https://docs.mantle.xyz
+
+READY TO BUILD
+ Any user with a Google account can be on Mantle in under 60 seconds. Network switching is
+ invisible. Warnings are minimal. The agent does the rest.
+Component
+File
+Section
+PrivyProvider — full Mantle config
+privy-mantle-onboarding.jsx
+5.4
+15+ social auth methods
+privy-mantle-onboarding.jsx
+5.3 / 6.3
+Embedded wallet auto-creation
+PrivyProvider createOnLogin config
+5.4
+useAutoSwitchToMantle hook (KEY)
+privy-mantle-onboarding.jsx
+7
+Silent auto-switch on wallet connect
+Hook fires before Screen 2
+7.1-7.2
+No Warning C — network is infrastructure
+By design — auto-switch replaces it
+8.3
+Warning A: No EVM wallet
+WalletCheckScreen
+8.1
+Warning B: Empty wallet + funding UI
+WalletCheckScreen
+8.2 / 8.4
+4 on-ramp options (pre-filled address)
+OnrampCard components
+8.4
+3-screen state machine (no network screen)
+MantlePrivyOnboarding
+6
+App.jsx integration pattern
+Section 10
+10
+242-project registry from mantle.xyz
+Seed data source confirmed
+3
+6-source data waterfall
+DeFiLlama→Dune→Graph→Nansen→Mobula→Messari
+12
+X + Discord social intelligence
+Documented in v4
+12
+Claude streaming agent (8 tools)
+claude-sonnet-4-20250514
+12
+ Mantle Agentic Portal v5 Final — Turing Hackathon | Generated May 26, 2026
