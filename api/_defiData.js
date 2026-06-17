@@ -1,0 +1,218 @@
+const MANTLE_CHAIN = 'mantle';
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const cache = new Map();
+
+export function formatUsd(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return 'N/A';
+  if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+  if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
+  if (num >= 1e3) return `$${(num / 1e3).toFixed(1)}K`;
+  return `$${Math.round(num).toLocaleString()}`;
+}
+
+function getCached(key) {
+  const hit = cache.get(key);
+  if (!hit || Date.now() - hit.fetchedAt > CACHE_TTL_MS) return null;
+  return hit.value;
+}
+
+function setCached(key, value) {
+  cache.set(key, { value, fetchedAt: Date.now() });
+  return value;
+}
+
+async function fetchJson(url, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function getMantleTvlNumber(details) {
+  const chainTvls = details?.currentChainTvls || {};
+  const mantleKey = Object.keys(chainTvls).find((key) => key.toLowerCase() === MANTLE_CHAIN);
+  if (mantleKey && typeof chainTvls[mantleKey] === 'number') return chainTvls[mantleKey];
+
+  const chains = Array.isArray(details?.chains) ? details.chains.map((chain) => String(chain).toLowerCase()) : [];
+  const isOnlyMantle = chains.length === 1 && chains[0] === MANTLE_CHAIN;
+  if (isOnlyMantle) {
+    const totalFromChains = Object.values(chainTvls).reduce(
+      (sum, value) => sum + (typeof value === 'number' ? value : 0),
+      0
+    );
+    if (totalFromChains > 0) return totalFromChains;
+    const last = Array.isArray(details?.tvl) ? details.tvl.at(-1) : null;
+    if (typeof last?.totalLiquidityUSD === 'number') return last.totalLiquidityUSD;
+  }
+
+  return 0;
+}
+
+function getGlobalTvlNumber(details) {
+  const chainTvls = details?.currentChainTvls || {};
+  const totalFromChains = Object.values(chainTvls).reduce(
+    (sum, value) => sum + (typeof value === 'number' ? value : 0),
+    0
+  );
+  if (totalFromChains > 0) return totalFromChains;
+  const last = Array.isArray(details?.tvl) ? details.tvl.at(-1) : null;
+  return typeof last?.totalLiquidityUSD === 'number' ? last.totalLiquidityUSD : 0;
+}
+
+function extractMantleFeeNumber(summary, details) {
+  const breakdown = summary?.chainBreakdown || {};
+  const mantleKey = Object.keys(breakdown).find((key) => key.toLowerCase() === MANTLE_CHAIN);
+  const mantleBreakdown = mantleKey ? breakdown[mantleKey] : null;
+
+  if (typeof mantleBreakdown?.total24h === 'number') return mantleBreakdown.total24h;
+  if (typeof mantleBreakdown === 'number') return mantleBreakdown;
+
+  const chains = Array.isArray(details?.chains) ? details.chains.map((chain) => String(chain).toLowerCase()) : [];
+  const isOnlyMantle = chains.length === 1 && chains[0] === MANTLE_CHAIN;
+  if (isOnlyMantle && typeof summary?.total24h === 'number') return summary.total24h;
+
+  return 0;
+}
+
+export async function fetchProtocolMantleData(slug, baseline = {}) {
+  if (!slug) {
+    return {
+      tvl: baseline.baseTvl || 'N/A',
+      mantleTvl: baseline.baseTvl || 'N/A',
+      fees24h: baseline.baseFees || 'N/A',
+      dataSource: 'Baseline',
+      isStale: true,
+      isFallback: true,
+      fetchedAt: Date.now(),
+    };
+  }
+
+  const key = `protocol:${slug}`;
+  const cached = getCached(key);
+  if (cached) return cached;
+
+  try {
+    const details = await fetchJson(`https://api.llama.fi/protocol/${encodeURIComponent(slug)}`, 10000);
+    const mantleTvlNum = getMantleTvlNumber(details);
+    const globalTvlNum = getGlobalTvlNumber(details);
+
+    let feeNum = 0;
+    for (const dataType of ['dailyFees', 'dailyRevenue']) {
+      try {
+        const summary = await fetchJson(
+          `https://api.llama.fi/summary/fees/${encodeURIComponent(slug)}?dataType=${dataType}`,
+          7000
+        );
+        feeNum = extractMantleFeeNumber(summary, details);
+        if (feeNum > 0) break;
+      } catch {
+        // Keep trying the next DeFiLlama summary type.
+      }
+    }
+
+    return setCached(key, {
+      tvl: formatUsd(globalTvlNum),
+      mantleTvl: formatUsd(mantleTvlNum),
+      fees24h: formatUsd(feeNum),
+      logoUrl: details.logo || `https://icons.llamao.fi/icons/protocols/${slug}.png`,
+      dataSource: 'DeFiLlama',
+      isStale: false,
+      fetchedAt: Date.now(),
+    });
+  } catch (error) {
+    console.warn(`[DeFiData] Protocol fetch failed for ${slug}:`, error.message);
+    return {
+      tvl: baseline.baseTvl || 'N/A',
+      mantleTvl: baseline.baseTvl || 'N/A',
+      fees24h: baseline.baseFees || 'N/A',
+      dataSource: 'Baseline',
+      isStale: true,
+      isFallback: true,
+      fetchedAt: Date.now(),
+    };
+  }
+}
+
+async function fetchMantleDappFees() {
+  for (const dataType of ['dailyFees', 'dailyRevenue']) {
+    try {
+      const overview = await fetchJson(
+        `https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=${dataType}`,
+        7000
+      );
+      if (typeof overview?.total24h === 'number' && overview.total24h > 0) return overview.total24h;
+      if (Array.isArray(overview?.protocols)) {
+        const sum = overview.protocols.reduce(
+          (total, protocol) => total + (typeof protocol.total24h === 'number' ? protocol.total24h : 0),
+          0
+        );
+        if (sum > 0) return sum;
+      }
+    } catch {
+      // Try the next aggregate type.
+    }
+  }
+  return 0;
+}
+
+export async function fetchMantleChainStats() {
+  const key = 'chain:mantle';
+  const cached = getCached(key);
+  if (cached) return cached;
+
+  try {
+    const [historical, allChains, dappFees24h] = await Promise.all([
+      fetchJson('https://api.llama.fi/v2/historicalChainTvl/Mantle', 7000).catch(() => []),
+      fetchJson('https://api.llama.fi/v2/chains', 7000).catch(() => []),
+      fetchMantleDappFees(),
+    ]);
+
+    const history = Array.isArray(historical) ? historical : [];
+    const latest = history.at(-1);
+    const previous = history.at(-2);
+    const chainTvlNum = typeof latest?.tvl === 'number' ? latest.tvl : 0;
+    const prevTvlNum = typeof previous?.tvl === 'number' ? previous.tvl : chainTvlNum;
+    const changePct = prevTvlNum ? ((chainTvlNum - prevTvlNum) / prevTvlNum) * 100 : 0;
+
+    const mantleChain = Array.isArray(allChains)
+      ? allChains.find((chain) => String(chain?.name || '').toLowerCase() === MANTLE_CHAIN)
+      : null;
+    const currentTvlNum = typeof mantleChain?.tvl === 'number' ? mantleChain.tvl : chainTvlNum;
+
+    return setCached(key, {
+      chainTvl: formatUsd(currentTvlNum || chainTvlNum),
+      chainTvlChange: `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`,
+      ecosystemTvl: formatUsd(currentTvlNum || chainTvlNum),
+      ecosystemTvlChange: `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`,
+      fees24h: formatUsd(dappFees24h),
+      feesLabel: 'Mantle dApp fees',
+      dataSource: 'DeFiLlama',
+      fetchedAt: Date.now(),
+    });
+  } catch (error) {
+    console.warn('[DeFiData] Mantle chain stats failed:', error.message);
+    return {
+      chainTvl: 'N/A',
+      chainTvlChange: '0.00%',
+      ecosystemTvl: 'N/A',
+      ecosystemTvlChange: '0.00%',
+      fees24h: 'N/A',
+      feesLabel: 'Mantle dApp fees',
+      dataSource: 'DeFiLlama',
+      fetchedAt: Date.now(),
+    };
+  }
+}
+
+export function setDataCacheHeaders(res) {
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=900');
+}

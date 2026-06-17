@@ -1,5 +1,6 @@
 import useSWR from 'swr';
 import type { Project } from '../../../lib/mantleProjects';
+import { readCachedData, writeCachedData } from '../../../lib/dataCache';
 
 export interface ProtocolData {
   tvl: string;
@@ -15,7 +16,9 @@ export interface ProtocolData {
 const fetcher = async (url: string) => {
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch protocol data');
-  return res.json();
+  const data = await res.json();
+  writeCachedData<ProtocolData>(url, data);
+  return data;
 };
 
 export function useProtocolData(project: Project) {
@@ -29,8 +32,11 @@ export function useProtocolData(project: Project) {
     baseFees: project.fees24h       || '',
   });
 
+  const cacheKey = `/api/protocol?${params.toString()}`;
+  const cached = readCachedData<ProtocolData>(cacheKey);
+
   const { data, error, isLoading } = useSWR<ProtocolData>(
-    `/api/protocol?${params.toString()}`,
+    cacheKey,
     fetcher,
     {
       revalidateOnFocus:    false,
@@ -38,7 +44,7 @@ export function useProtocolData(project: Project) {
       // Refresh every 5 minutes so fees stay current
       refreshInterval:      5 * 60 * 1000,
       dedupingInterval:     60_000,
-      fallbackData: {
+      fallbackData: cached ?? {
         tvl:        project.tvl,
         mantleTvl:  project.tvl,
         fees24h:    project.fees24h,

@@ -28,6 +28,7 @@ import { useProtocolData } from '../onboarding/hooks/useProtocolData';
 import { mantlePublicClient } from '../../lib/chains';
 import { formatEther } from 'viem';
 import { LANGUAGES, TRANSLATIONS } from '../../lib/translations';
+import { readCachedData, writeCachedData } from '../../lib/dataCache';
 
 interface DiscoveryInterfaceProps {
   onProceedToDApp: (project: Project) => void;
@@ -75,7 +76,7 @@ function ProjectDetailModal({ project, onClose, onProceedToDApp }: ProjectDetail
 
         <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
           <div>
-            <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
+            <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">TVL ON MANTLE</p>
             <p className="text-xl font-black text-emerald-500">{data.mantleTvl || data.tvl}</p>
           </div>
           <div>
@@ -228,6 +229,27 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   // --- Real TVL + 24h Fees from /api/chain-stats (DeFiLlama server source) ---
   useEffect(() => {
     const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+    const cachedStats = readCachedData<{
+      chainTvl?: string;
+      chainTvlChange?: string;
+      ecosystemTvl?: string;
+      ecosystemTvlChange?: string;
+      fees24h?: string;
+    }>('chain-stats');
+
+    if (cachedStats) {
+      const prevStats = usePortalStore.getState().chainStats;
+      setPortalState({
+        chainStats: {
+          ...prevStats,
+          tvl: cachedStats.ecosystemTvl || cachedStats.chainTvl || prevStats.tvl,
+          chainTvl: cachedStats.chainTvl || prevStats.chainTvl,
+          tvlChange: cachedStats.ecosystemTvlChange || cachedStats.chainTvlChange || prevStats.tvlChange,
+          chainTvlChange: cachedStats.chainTvlChange || prevStats.chainTvlChange,
+          fees24h: cachedStats.fees24h || prevStats.fees24h,
+        }
+      });
+    }
 
     const formatFee = (f: number) =>
       f >= 1e6
@@ -252,6 +274,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           if (!res.ok) throw new Error(`chain-stats failed: ${res.status}`);
           if (res.ok) {
             const d = await res.json();
+            writeCachedData('chain-stats', d);
             chainTvl = d.chainTvl || '';
             chainTvlChange = d.chainTvlChange || '';
             ecosystemTvl = d.ecosystemTvl || '';
@@ -624,10 +647,10 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             {/* Live stats */}
             <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-4 gap-2.5 min-w-[280px] xl:max-w-2xl">
               {[
-                { label: t.tvl, value: chainStats.chainTvl, desc: chainStats.chainTvlChange, color: 'text-cyan-600 dark:text-cyan-400' },
+                { label: 'Mantle DeFi TVL', value: chainStats.chainTvl, desc: chainStats.chainTvlChange, color: 'text-cyan-600 dark:text-cyan-400' },
                 { label: t.latestBlock, value: chainStats.blockNumber, desc: 'Mantle Mainnet', color: 'text-blue-600 dark:text-blue-400' },
                 { label: t.gasPrice, value: chainStats.gasPrice, desc: 'Ultra-low cost', color: 'text-[#00b38c] dark:text-[#00e6b4]' },
-                { label: '24h Fees', value: chainStats.fees24h || '—', desc: 'Chain-wide • DeFiLlama', color: 'text-purple-600 dark:text-purple-400' },
+                { label: '24h dApp Fees', value: chainStats.fees24h || '—', desc: 'Mantle dApps · DeFiLlama', color: 'text-purple-600 dark:text-purple-400' },
               ].map((st, idx) => (
                 <div key={idx} className="p-2.5 rounded-xl bg-white/80 dark:bg-black/50 border border-[#00e6b4]/10 dark:border-slate-800/80 space-y-0.5 shadow-sm hover:scale-[1.02] transition duration-200">
                   <p className="text-[8px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>

@@ -72,7 +72,7 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
         {/* Stats Section */}
         <div className="grid grid-cols-2 gap-2 py-3 border-t border-[var(--border-primary)]">
           <div>
-            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">{t.tvl}</p>
+            <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">TVL ON MANTLE</p>
             <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">{data.mantleTvl || data.tvl}</p>
           </div>
           <div className="text-right">

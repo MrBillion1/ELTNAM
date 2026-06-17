@@ -18,6 +18,7 @@ import { URL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { AGENT_TOOLS as SHARED_AGENT_TOOLS, executeToolCallJS as executeSharedToolCall } from './api/_agentCore.js';
+import { fetchMantleChainStats, fetchProtocolMantleData } from './api/_defiData.js';
 
 // Manually load .env on startup (no dotenv dependency needed)
 try {
@@ -164,64 +165,9 @@ async function fetchLlamaData(slug) {
  * Resolves project details using DeFiLlama or falls back to simulated waterfalls
  */
 async function resolveProtocolData(slug, address, name, baseTvl, baseFees) {
-  // 1. Attempt DeFiLlama
-  if (slug) {
-    const llamaData = await fetchLlamaData(slug);
-    if (llamaData) {
-      console.log(`[API] Resolved ${name} via DeFiLlama API (TVL: ${llamaData.tvl}, Mantle: ${llamaData.mantleTvl})`);
-      return llamaData;
-    }
-  }
-
-  // 2. Fallback to Dune Analytics / The Graph / Messari / Mobula
-  const sources = ['Dune Analytics', 'The Graph', 'Messari', 'Mobula', 'Nansen'];
-  const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const source = sources[hash % sources.length];
-
-  let fluctuatedTvl = baseTvl || 'N/A';
-  let fluctuatedFees = baseFees || 'N/A';
-
-  try {
-    if (baseTvl && baseTvl !== 'N/A' && baseTvl !== '$0.00') {
-      const match = baseTvl.match(/\$?([0-9.]+)([MB])?/);
-      if (match) {
-        const val = parseFloat(match[1]);
-        const unit = match[2] || '';
-        // Fluctuate by +/- 0.5% to 1.5%
-        const pct = 0.985 + Math.random() * 0.03;
-        fluctuatedTvl = `$${(val * pct).toFixed(1)}${unit}`;
-      }
-    }
-
-    if (baseFees && baseFees !== 'N/A' && baseFees !== '$0.00') {
-      const match = baseFees.replace(/,/g, '').match(/\$?([0-9.]+)([MB])?/);
-      if (match) {
-        const val = parseFloat(match[1]);
-        const unit = match[2] || '';
-        const pct = 0.95 + Math.random() * 0.1;
-        fluctuatedFees = `$${Math.round(val * pct).toLocaleString()}${unit}`;
-      }
-    }
-  } catch (e) {
-    // Ignore fluctuations and use baseline
-  }
-
-  // Fallback Logo URLs using unavatar/clearbit
-  const cleanDomain = name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.xyz';
-  const logoUrl = `https://logo.clearbit.com/${cleanDomain}?size=128`;
-
-  console.log(`[API] Resolved ${name} via Fallback Waterfall -> ${source} (TVL: ${fluctuatedTvl})`);
-
-  return {
-    tvl: fluctuatedTvl,
-    mantleTvl: fluctuatedTvl,
-    fees24h: fluctuatedFees,
-    logoUrl,
-    dataSource: source,
-    isStale: true,
-    isFallback: true,
-    fetchedAt: Date.now()
-  };
+  const data = await fetchProtocolMantleData(slug, { baseTvl, baseFees });
+  console.log(`[API] Resolved ${name || slug || 'protocol'} via ${data.dataSource} (Mantle TVL: ${data.mantleTvl})`);
+  return data;
 }
 
 const AGENT_TOOLS = [
@@ -751,105 +697,9 @@ async function handleRequest(req, res) {
 
   // ── GET /api/chain-stats ─ real Mantle TVL + 24h fees from DeFiLlama ───────
   if (pathname === '/api/chain-stats' && req.method === 'GET') {
-    try {
-      const [histRes, allChainsRes, feesRes] = await Promise.all([
-        fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle'),
-        fetch('https://api.llama.fi/v2/chains'),
-        fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees'),
-      ]);
-
-      const hist = histRes.ok ? await histRes.json() : [];
-      const allChains = allChainsRes.ok ? await allChainsRes.json() : [];
-
-      // Latest two data points for change %
-      const latest = hist.length >= 2 ? hist[hist.length - 1] : null;
-      const prev = hist.length >= 2 ? hist[hist.length - 2] : null;
-      const chainTvlNum = latest ? latest.tvl : 0;
-      const prevTvlNum = prev ? prev.tvl : chainTvlNum;
-      const chainTvlChangePct = prevTvlNum ? ((chainTvlNum - prevTvlNum) / prevTvlNum * 100).toFixed(2) : '0.00';
-      const chainTvlStr = chainTvlNum >= 1e9
-        ? `$${(chainTvlNum / 1e9).toFixed(2)}B`
-        : chainTvlNum >= 1e6
-          ? `$${(chainTvlNum / 1e6).toFixed(1)}M`
-          : `$${Math.round(chainTvlNum).toLocaleString()}`;
-      const chainTvlChange = `${parseFloat(chainTvlChangePct) >= 0 ? '+' : ''}${chainTvlChangePct}%`;
-
-      // Total ecosystem TVL
-      const mantleChain = allChains.find(c => c.name?.toLowerCase() === 'mantle');
-      const ecosystemTvlNum = mantleChain ? mantleChain.tvl : 0;
-      const ecosystemStr = ecosystemTvlNum >= 1e9
-        ? `$${(ecosystemTvlNum / 1e9).toFixed(2)}B`
-        : ecosystemTvlNum >= 1e6
-          ? `$${(ecosystemTvlNum / 1e6).toFixed(1)}M`
-          : `$${Math.round(ecosystemTvlNum).toLocaleString()}`;
-
-      // ── Parse 24h fees for Mantle chain ────────────────────────────────────
-      let fees24h = 'N/A';
-      const formatFee = (f) =>
-        f >= 1e6
-          ? `$${(f / 1e6).toFixed(1)}M`
-          : f >= 1e3
-            ? `$${(f / 1e3).toFixed(1)}K`
-            : `$${Math.round(f).toLocaleString()}`;
-
-      if (feesRes.ok) {
-        try {
-          const fd = await feesRes.json();
-          if (typeof fd?.total24h === 'number' && fd.total24h > 0) {
-            fees24h = formatFee(fd.total24h);
-          } else if (Array.isArray(fd?.protocols)) {
-            const sum = fd.protocols.reduce(
-              (acc, p) => acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0),
-              0
-            );
-            if (sum > 0) fees24h = formatFee(sum);
-          }
-        } catch (parseErr) {
-          console.warn('[API] /api/chain-stats fees parse error:', parseErr.message);
-        }
-      }
-
-      if (fees24h === 'N/A') {
-        try {
-          const revenueRes = await fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyRevenue');
-          if (revenueRes.ok) {
-            const rd = await revenueRes.json();
-            if (typeof rd?.total24h === 'number' && rd.total24h > 0) {
-              fees24h = formatFee(rd.total24h);
-            } else if (Array.isArray(rd?.protocols)) {
-              const sum = rd.protocols.reduce(
-                (acc, p) => acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0),
-                0
-              );
-              if (sum > 0) fees24h = formatFee(sum);
-            }
-          }
-        } catch (revenueErr) {
-          console.warn('[API] /api/chain-stats revenue fallback error:', revenueErr.message);
-        }
-      }
-
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        chainTvl: chainTvlStr,
-        chainTvlChange,
-        ecosystemTvl: ecosystemStr,
-        ecosystemTvlChange: chainTvlChange,
-        fees24h,
-        fetchedAt: Date.now(),
-      }));
-    } catch (err) {
-      console.warn('[API] /api/chain-stats error:', err.message);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        chainTvl: '$156.2M',
-        chainTvlChange: '-0.01%',
-        ecosystemTvl: '$156.2M',
-        ecosystemTvlChange: '-0.01%',
-        fees24h: 'N/A',
-        fetchedAt: Date.now(),
-      }));
-    }
+    const data = await fetchMantleChainStats();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 's-maxage=300, stale-while-revalidate=900' });
+    res.end(JSON.stringify(data));
     return;
   }
 
