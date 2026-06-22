@@ -17,8 +17,9 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { slug, baseTvl, baseFees } = req.query;
+  const { slug, name, baseTvl, baseFees } = req.query;
   const data = await fetchProtocolMantleData(String(slug || ''), {
+    name: String(name || ''),
     baseTvl: String(baseTvl || ''),
     baseFees: String(baseFees || ''),
   });

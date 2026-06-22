@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { AGENT_TOOLS as SHARED_AGENT_TOOLS, executeToolCallJS as executeSharedToolCall } from './api/_agentCore.js';
 import { fetchMantleChainStats, fetchProtocolMantleData } from './api/_defiData.js';
+import { fetchMantleActivity } from './api/_activityData.js';
 
 // Manually load .env on startup (no dotenv dependency needed)
 try {
@@ -91,7 +92,7 @@ async function fetchLlamaData(slug) {
       }
     }
 
-    const mantleTvl = tvlVal > 0 ? `$${tvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'N/A';
+    const mantleTvl = tvlVal > 0 ? `$${tvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0';
 
     // Global TVL
     let totalTvlVal = 0;
@@ -101,10 +102,10 @@ async function fetchLlamaData(slug) {
     if (!totalTvlVal && Array.isArray(details.tvl) && details.tvl.length > 0) {
       totalTvlVal = details.tvl[details.tvl.length - 1].totalLiquidityUSD || 0;
     }
-    const totalTvl = totalTvlVal > 0 ? `$${totalTvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'N/A';
+    const totalTvl = totalTvlVal > 0 ? `$${totalTvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0';
 
     // 3. Fetch daily fees separately
-    let fees24h = 'N/A';
+    let fees24h = '$0';
     for (const dataType of ['dailyFees', 'dailyRevenue']) {
       try {
         const feesRes = await fetch(`https://api.llama.fi/summary/fees/${slug}?dataType=${dataType}`);
@@ -132,7 +133,7 @@ async function fetchLlamaData(slug) {
               }
             }
 
-            if (feeNum !== null && feeNum !== undefined && feeNum >= 0) {
+            if (feeNum !== null && feeNum !== undefined && feeNum > 0) {
               fees24h = `$${parseFloat(feeNum).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
               break;
             }
@@ -165,7 +166,7 @@ async function fetchLlamaData(slug) {
  * Resolves project details using DeFiLlama or falls back to simulated waterfalls
  */
 async function resolveProtocolData(slug, address, name, baseTvl, baseFees) {
-  const data = await fetchProtocolMantleData(slug, { baseTvl, baseFees });
+  const data = await fetchProtocolMantleData(slug, { name, baseTvl, baseFees });
   console.log(`[API] Resolved ${name || slug || 'protocol'} via ${data.dataSource} (Mantle TVL: ${data.mantleTvl})`);
   return data;
 }
@@ -692,6 +693,18 @@ async function handleRequest(req, res) {
     const data = await resolveProtocolData(slug, address, name, baseTvl, baseFees);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
+    return;
+  }
+
+  // GET /api/transactions - real Mantle Explorer protocol activity
+  if (pathname === '/api/transactions' && req.method === 'GET') {
+    const data = await fetchMantleActivity({
+      address: url.searchParams.get('address') || '',
+      category: url.searchParams.get('category') || '',
+      projectName: url.searchParams.get('project') || 'this protocol',
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 's-maxage=20, stale-while-revalidate=60' });
+    res.end(JSON.stringify(data.items));
     return;
   }
 

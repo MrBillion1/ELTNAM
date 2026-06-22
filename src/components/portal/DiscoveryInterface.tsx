@@ -229,6 +229,11 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   // --- Real TVL + 24h Fees from /api/chain-stats (DeFiLlama server source) ---
   useEffect(() => {
     const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+    const isUsefulMetric = (value?: string) =>
+      Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '—');
+    const firstUsefulMetric = (...values: Array<string | undefined>) =>
+      values.find((value) => isUsefulMetric(value));
+
     const cachedStats = readCachedData<{
       chainTvl?: string;
       chainTvlChange?: string;
@@ -242,11 +247,11 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
       setPortalState({
         chainStats: {
           ...prevStats,
-          tvl: cachedStats.ecosystemTvl || cachedStats.chainTvl || prevStats.tvl,
-          chainTvl: cachedStats.chainTvl || prevStats.chainTvl,
+          tvl: firstUsefulMetric(cachedStats.ecosystemTvl, cachedStats.chainTvl) || prevStats.tvl,
+          chainTvl: firstUsefulMetric(cachedStats.chainTvl) || prevStats.chainTvl,
           tvlChange: cachedStats.ecosystemTvlChange || cachedStats.chainTvlChange || prevStats.tvlChange,
           chainTvlChange: cachedStats.chainTvlChange || prevStats.chainTvlChange,
-          fees24h: cachedStats.fees24h || prevStats.fees24h,
+          fees24h: firstUsefulMetric(cachedStats.fees24h) || prevStats.fees24h,
         }
       });
     }
@@ -274,14 +279,15 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           if (!res.ok) throw new Error(`chain-stats failed: ${res.status}`);
           if (res.ok) {
             const d = await res.json();
-            writeCachedData('chain-stats', d);
             chainTvl = d.chainTvl || '';
             chainTvlChange = d.chainTvlChange || '';
             ecosystemTvl = d.ecosystemTvl || '';
             ecosystemTvlChange = d.ecosystemTvlChange || '';
-            // d.fees24h is now always populated server-side with a live value or 'N/A'.
             fees24h = d.fees24h != null ? String(d.fees24h) : '';
-            tvlSuccess = !!(chainTvl || fees24h);
+            if (isUsefulMetric(chainTvl) || isUsefulMetric(ecosystemTvl) || isUsefulMetric(fees24h)) {
+              writeCachedData('chain-stats', d);
+            }
+            tvlSuccess = !!(isUsefulMetric(chainTvl) || isUsefulMetric(ecosystemTvl) || isUsefulMetric(fees24h));
           }
         } catch (err) { throw err; }
 
@@ -339,15 +345,19 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         // (Direct browser fetch of DeFiLlama is CORS-blocked; server.mjs handles
         //  this server-side now. If both fail, show a known snapshot value.)
         if (!fees24h) {
-          fees24h = 'N/A';
+          fees24h = '';
         }
 
         // ── Commit to store — always write fees24h to clear the 'Loading…' state ─
         const prevStats = usePortalStore.getState().chainStats;
+        const nextTvl = firstUsefulMetric(ecosystemTvl, chainTvl);
+        const nextChainTvl = firstUsefulMetric(chainTvl);
+        fees24h = firstUsefulMetric(fees24h) || prevStats.fees24h;
         setPortalState({
           chainStats: {
             ...prevStats,
-            ...(chainTvl       && { tvl: ecosystemTvl || chainTvl, chainTvl }),
+            ...(nextTvl && { tvl: nextTvl }),
+            ...(nextChainTvl && { chainTvl: nextChainTvl }),
             ...(chainTvlChange && { tvlChange: ecosystemTvlChange || chainTvlChange, chainTvlChange }),
             fees24h, // always write — even fallback clears 'Loading…'
           }

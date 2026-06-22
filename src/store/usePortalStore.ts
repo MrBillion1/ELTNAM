@@ -78,7 +78,7 @@ export const usePortalStore = create<PortalState>((set) => ({
     gasPrice: '50.000 Gwei',
     tps: '12.4',
     activeUsers24h: '48,242',
-    fees24h: 'N/A',
+    fees24h: '$0',
   },
 
   setPortalState: (state) => set((prev) => ({ ...prev, ...state })),

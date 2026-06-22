@@ -106,7 +106,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   // Derive domain for favicon logo
   const domain = project.url.replace('https://', '').replace('http://', '').split('/')[0];
 
-  const [activityFeed, setActivityFeed] = useState<{ action: string; time: string }[]>([]);
+  const [activityFeed, setActivityFeed] = useState<{ action: string; time: string; url?: string; source?: string }[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -121,17 +121,11 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
         }
       } catch (err) {
         if (active) {
-          // Fallback to static realistic transactions if server is unavailable
-          const cat = project.category;
-          const addr = () => '0x' + Math.random().toString(16).slice(2, 8) + '...' + Math.random().toString(16).slice(2, 6);
-          const entries: { action: string; time: string }[] = [];
-          if (cat === 'dex') {
-            entries.push({ action: `${addr()} swapped 150 MNT for USDC`, time: '12 min ago' });
-            entries.push({ action: `${addr()} swapped 2.5 mETH for USDT`, time: '2 hours ago' });
-          } else {
-            entries.push({ action: `${addr()} interacted with contract`, time: '1 day ago' });
-          }
-          setActivityFeed(entries);
+          setActivityFeed((prev) => prev.length > 0 ? prev : [{
+            action: `Waiting for verified Mantle transactions for ${project.name}`,
+            time: 'live',
+            source: 'Mantle Explorer',
+          }]);
         }
       }
     };
@@ -535,7 +529,18 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                     <div className="space-y-2 max-h-52 overflow-y-auto scrollbar-hide">
                       {activityFeed.map((entry, i) => (
                         <div key={i} className="flex justify-between items-start gap-2 border-b border-slate-800/60 pb-2 last:border-0">
-                          <span className="text-[10px] text-slate-300 font-mono leading-snug flex-1">{entry.action}</span>
+                          {entry.url ? (
+                            <a
+                              href={entry.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-slate-300 hover:text-cyan-300 font-mono leading-snug flex-1 transition"
+                            >
+                              {entry.action}
+                            </a>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 font-mono leading-snug flex-1">{entry.action}</span>
+                          )}
                           <span className="text-[9px] text-slate-600 whitespace-nowrap flex-shrink-0">{entry.time}</span>
                         </div>
                       ))}
