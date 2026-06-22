@@ -1,4 +1,4 @@
-﻿import useSWR from 'swr';
+import useSWR from 'swr';
 import type { Project } from '../../../lib/mantleProjects';
 import { readCachedData, writeCachedData } from '../../../lib/dataCache';
 
@@ -14,7 +14,7 @@ export interface ProtocolData {
 }
 
 const isUsefulMetric = (value?: string): value is string =>
-  Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '-' && value !== 'â€”');
+  Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '-' && value !== '\u2014' && value !== '\u2013');
 
 const displayMetric = (value?: string) => (isUsefulMetric(value) ? value : '-');
 

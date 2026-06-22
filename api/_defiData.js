@@ -6,12 +6,26 @@ const cache = new Map();
 // Key = the defillamaSlug we store in mantleProjects.ts
 // Value = array of alternative slugs to try for fee lookups.
 const SLUG_FEE_ALIASES = {
-  'merchant-moe':    ['merchant-moe-liquidity-book', 'merchant-moe-dex'],
-  'stargate-v1':     ['stargate-v2', 'stargate-v1'],
-  'lendle-pooled-markets': ['lendle-pooled-markets'],
-  'compound-v3':     ['compound-v3'],
-  'ondo-yield-assets': ['ondo-yield-assets'],
-  'agni-finance':    ['agni-finance'],
+  'merchant-moe':              ['merchant-moe-liquidity-book', 'merchant-moe-dex'],
+  'stargate-v1':               ['stargate-v2', 'stargate-v1'],
+  'lendle-pooled-markets':     ['lendle-pooled-markets'],
+  'compound-v3':               ['compound-v3'],
+  'ondo-yield-assets':         ['ondo-yield-assets'],
+  'agni-finance':              ['agni-finance'],
+  // Mantle-specific child slugs (fixed from invalid parent slugs)
+  'cleopatra-cl':              ['cleopatra-cl', 'cleopatra-legacy'],
+  'velocimeter-v2':            ['velocimeter-v2'],
+  'stryke-clamm':              ['stryke-clamm'],
+  'timeswap-v2':               ['timeswap-v2'],
+  'aurelius':                  ['aurelius'],
+  'myso-v2':                   ['myso-v2'],
+  'swapsicle-v2':              ['swapsicle-v2'],
+  'reax-swaps':                ['reax-swaps', 'reax-lending'],
+  'woofi-swap':                ['woofi-swap'],
+  'native-swap':               ['native-swap'],
+  'pulsar-swap':               ['pulsar-swap'],
+  'zklink-nova':               ['zklink-nova'],
+  'gamma':                     ['gamma'],
 };
 
 export function formatUsd(value) {
