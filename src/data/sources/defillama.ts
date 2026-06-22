@@ -34,7 +34,7 @@ export async function fetchFromDeFiLlama(slug: string) {
     const tvl = tvlVal > 0 ? `$${tvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : null;
 
     // 3. Fetch fees
-    let fees24h = 'N/A';
+    let fees24h = '-';
     for (const dataType of ['dailyFees', 'dailyRevenue']) {
       try {
         const feesRes = await axios.get(`https://api.llama.fi/summary/fees/${slug}?dataType=${dataType}`);
@@ -61,7 +61,7 @@ export async function fetchFromDeFiLlama(slug: string) {
             }
           }
 
-          if (feeNum !== null && feeNum !== undefined && feeNum >= 0) {
+          if (feeNum !== null && feeNum !== undefined && feeNum > 0) {
             fees24h = `$${parseFloat(feeNum).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
             break;
           }

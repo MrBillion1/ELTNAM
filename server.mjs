@@ -92,7 +92,7 @@ async function fetchLlamaData(slug) {
       }
     }
 
-    const mantleTvl = tvlVal > 0 ? `$${tvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0';
+    const mantleTvl = tvlVal > 0 ? `$${tvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-';
 
     // Global TVL
     let totalTvlVal = 0;
@@ -102,10 +102,10 @@ async function fetchLlamaData(slug) {
     if (!totalTvlVal && Array.isArray(details.tvl) && details.tvl.length > 0) {
       totalTvlVal = details.tvl[details.tvl.length - 1].totalLiquidityUSD || 0;
     }
-    const totalTvl = totalTvlVal > 0 ? `$${totalTvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0';
+    const totalTvl = totalTvlVal > 0 ? `$${totalTvlVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-';
 
     // 3. Fetch daily fees separately
-    let fees24h = '$0';
+    let fees24h = '-';
     for (const dataType of ['dailyFees', 'dailyRevenue']) {
       try {
         const feesRes = await fetch(`https://api.llama.fi/summary/fees/${slug}?dataType=${dataType}`);

@@ -63,8 +63,8 @@ export async function fetchProtocolData(project: Project): Promise<ProtocolResul
       
       console.log(`[Waterfall] Successful fetch: ${src.name} served data for ${project.name}`);
       return {
-        tvl: data.tvl ?? 'N/A',
-        fees24h: data.fees24h ?? 'N/A',
+        tvl: data.tvl ?? '-',
+        fees24h: data.fees24h ?? '-',
         dataSource: src.name,
         isStale: false,
         fetchedAt: Date.now(),
@@ -78,8 +78,8 @@ export async function fetchProtocolData(project: Project): Promise<ProtocolResul
   // Fallback to registry baseline if all queries fail
   console.log(`[Waterfall] All data sources failed for ${project.name}. Serving baseline.`);
   return {
-    tvl: project.tvl,
-    fees24h: project.fees24h,
+    tvl: '-',
+    fees24h: '-',
     dataSource: 'Baseline',
     isStale: true,
     fetchedAt: Date.now(),

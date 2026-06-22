@@ -1,4 +1,5 @@
-const CACHE_PREFIX = 'eltnam:data:';
+// v2: bumped to invalidate stale baseline TVL/fees values cached from v1
+const CACHE_PREFIX = 'eltnam:data:v2:';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 interface CachedPayload<T> {

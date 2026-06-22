@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import {
   ArrowLeft, ExternalLink, Cpu, CheckCircle, RefreshCw,
@@ -21,7 +21,11 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   const { wallets, addMessage, isChatOpen, setPortalState, language } = usePortalStore();
   const { connectWallet } = usePrivy();
   const t = TRANSLATIONS[language];
-  const { data: protocolData } = useProtocolData(project);
+  const { data: protocolData, isLoading: isProtocolLoading } = useProtocolData(project);
+  const displayedTvl = protocolData.mantleTvl || protocolData.tvl || '-';
+  const displayedFees = protocolData.fees24h || '-';
+  const hasVerifiedMetric = displayedTvl !== '-' || displayedFees !== '-';
+  const greetingKeyRef = useRef('');
 
   const [intentInput, setIntentInput] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
@@ -140,14 +144,18 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
   // Auto-greet in the AI sidebar messages
   useEffect(() => {
+    if (isProtocolLoading && !hasVerifiedMetric) return;
+    const greetingKey = `${project.id}:${language}`;
+    if (greetingKeyRef.current === greetingKey) return;
+    greetingKeyRef.current = greetingKey;
+
     addMessage({
       type: 'agent',
       text: `${t.copilotGreeting.replace('this dApp', `**${project.name}**`)}\n\n` +
-        `📊 **${t.tvl}**: ${project.tvl} · **24h Fees**: ${project.fees24h}\n\n` +
-        `**Quick actions I can do for you:**\n${project.actions.map((a) => `• ${a}`).join('\n')}`,
+        `ðŸ“Š **${t.tvl}**: ${displayedTvl} · **24h Fees**: ${displayedFees}\n\n` +
+        `**Quick actions I can do for you:**\n${project.actions.map((a) => `â€¢ ${a}`).join('\n')}`,
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.name, language]);
+  }, [addMessage, displayedFees, displayedTvl, hasVerifiedMetric, isProtocolLoading, language, project.actions, project.id, project.name, t]);
 
   const handleIntentSubmit = async (e?: React.FormEvent, customIntent?: string) => {
     if (e) e.preventDefault();
@@ -161,17 +169,17 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
     addMessage({ type: 'user', text: finalIntent });
     const pendingId = addMessage({
       type: 'agent',
-      text: `Processing: "${finalIntent}" on ${project.name}…`,
+      text: `Processing: "${finalIntent}" on ${project.name}â€¦`,
     });
 
     setTimeout(() => {
       const hash = '0x' + Math.random().toString(16).substr(2, 40);
       usePortalStore.getState().updateMessage(pendingId, {
         text:
-          `✅ **Action successfully executed on ${project.name}!**\n\n` +
+          `âœ… **Action successfully executed on ${project.name}!**\n\n` +
           `Your transaction has been processed via ERC-4337 Smart Account with sponsored gas.\n\n` +
-          `🔗 **Transaction Hash**: [${hash.slice(0, 10)}...${hash.slice(-8)}](https://explorer.mantle.xyz/tx/${hash})\n` +
-          `Status: **Confirmed** 🟢`,
+          `ðŸ”— **Transaction Hash**: [${hash.slice(0, 10)}...${hash.slice(-8)}](https://explorer.mantle.xyz/tx/${hash})\n` +
+          `Status: **Confirmed** ðŸŸ¢`,
       });
       setIntentInput('');
       setIsExecuting(false);
@@ -227,7 +235,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
         title="Click outer background to return to Discovery"
       />
       
-      {/* ── Left Panel: Real-time detail dashboard + website fallback ─────────────────────── */}
+      {/* â”€â”€ Left Panel: Real-time detail dashboard + website fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div
         className="flex-1 flex flex-col h-full relative overflow-hidden z-10 lg:p-4"
         onClick={(e) => {
@@ -239,7 +247,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
       >
         <div className="flex-1 flex flex-col h-full relative overflow-hidden bg-slate-900 border border-slate-800 rounded-2xl lg:rounded-3xl shadow-2xl">
 
-        {/* ── Top Breadcrumb Bar ── */}
+        {/* â”€â”€ Top Breadcrumb Bar â”€â”€ */}
         <div className="h-14 border-b border-slate-800/80 px-4 flex items-center justify-between bg-slate-950/80 backdrop-blur-md z-20 flex-shrink-0">
           <button
             onClick={onBack}
@@ -302,7 +310,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
           </div>
         </div>
 
-        {/* ── Tab Content Area ── */}
+        {/* â”€â”€ Tab Content Area â”€â”€ */}
         <div className="flex-1 relative overflow-hidden bg-slate-950">
 
           {/* TAB A: Interactive Portal Dashboard (No embedding issues, shows live details) */}
@@ -312,10 +320,10 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
               {/* Dynamic Stats Banner */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: t.tvl, value: protocolData.mantleTvl || protocolData.tvl || project.tvl, desc: 'Total Value Locked', color: 'text-emerald-400' },
-                  { label: '24h Fees', value: protocolData.fees24h || project.fees24h, desc: 'Protocol Revenue', color: 'text-cyan-400' },
-                  { label: 'Platform Status', value: 'Active 🟢', desc: (project as any).auditor ? `Audited by ${(project as any).auditor}` : 'Security Reviewed', color: 'text-blue-400' },
-                  { label: 'Gas Status', value: 'Sponsored ⚡', desc: 'Account Abstraction', color: 'text-[#00e6b4]' },
+                  { label: t.tvl, value: protocolData.mantleTvl || protocolData.tvl || '-', desc: 'Total Value Locked', color: 'text-emerald-400' },
+                  { label: '24h Fees', value: protocolData.fees24h || '-', desc: 'Protocol Revenue', color: 'text-cyan-400' },
+                  { label: 'Platform Status', value: 'Active ðŸŸ¢', desc: (project as any).auditor ? `Audited by ${(project as any).auditor}` : 'Security Reviewed', color: 'text-blue-400' },
+                  { label: 'Gas Status', value: 'Sponsored âš¡', desc: 'Account Abstraction', color: 'text-[#00e6b4]' },
                 ].map((s, i) => (
                   <div key={i} className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 space-y-1 hover:border-slate-700 transition">
                     <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">{s.label}</p>
@@ -439,7 +447,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                         {/* DEFAULT / OTHER */}
                         {project.category !== 'dex' && project.category !== 'lending' && project.category !== 'lst' && project.category !== 'yield' && (
                           <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-850 text-xs text-slate-400 text-center py-6 leading-relaxed">
-                            💡 Use our **AI Copilot intent bar** at the bottom to build and execute transactions directly on {project.name}!
+                            ðŸ’¡ Use our **AI Copilot intent bar** at the bottom to build and execute transactions directly on {project.name}!
                           </div>
                         )}
 
@@ -456,7 +464,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                     {simStep === 'processing' && (
                       <div className="py-12 flex flex-col items-center justify-center space-y-4">
                         <RefreshCw size={24} className="animate-spin text-cyan-400" />
-                        <p className="text-xs text-slate-400 font-bold">Simulating transaction on Mantle Ledger…</p>
+                        <p className="text-xs text-slate-400 font-bold">Simulating transaction on Mantle Ledgerâ€¦</p>
                       </div>
                     )}
 
@@ -578,8 +586,8 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 
                 {/* Simulated navigation */}
                 <div className="flex items-center gap-1 ml-2 flex-shrink-0 text-slate-500">
-                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">←</span>
-                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">→</span>
+                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">â†</span>
+                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">â†’</span>
                   <button
                     onClick={() => {
                       const iframe = document.getElementById('dapp-iframe') as HTMLIFrameElement;
@@ -594,7 +602,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
                 {/* Address Bar */}
                 <div className="flex-1 max-w-xl mx-auto flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800/80 font-mono text-[10px] text-slate-300">
-                  <span className="text-emerald-500">🔒</span>
+                  <span className="text-emerald-500">ðŸ”’</span>
                   <span className="truncate">{project.url}</span>
                 </div>
 
@@ -691,7 +699,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
             </div>
           )}
 
-          {/* ── Intent bar overlay (pinned to bottom of iframe area) ── */}
+          {/* â”€â”€ Intent bar overlay (pinned to bottom of iframe area) â”€â”€ */}
           <div className="absolute bottom-0 left-0 right-0 p-4 z-20 pointer-events-none">
             <form
               onSubmit={handleIntentSubmit}
@@ -714,7 +722,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 disabled:from-slate-800 disabled:to-slate-900 rounded-xl text-xs font-bold text-white transition hover:scale-105 active:scale-95 disabled:opacity-40 flex items-center gap-1.5 flex-shrink-0"
               >
                 {isExecuting ? (
-                  <><RefreshCw size={11} className="animate-spin" /><span>Processing…</span></>
+                  <><RefreshCw size={11} className="animate-spin" /><span>Processingâ€¦</span></>
                 ) : (
                   <><CheckCircle size={11} /><span>{t.submitToAi}</span></>
                 )}
@@ -736,7 +744,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
       </div>
     </div>
 
-      {/* ── Right Panel: Agent Sidebar (slides in after intent) ─────── */}
+      {/* â”€â”€ Right Panel: Agent Sidebar (slides in after intent) â”€â”€â”€â”€â”€â”€â”€ */}
       <div
         className={`transition-all duration-500 ease-in-out border-l border-slate-800/80 flex-shrink-0 h-full overflow-hidden ${
           isChatOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0 border-none'

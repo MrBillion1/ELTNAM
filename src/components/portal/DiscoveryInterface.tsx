@@ -230,7 +230,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   useEffect(() => {
     const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
     const isUsefulMetric = (value?: string) =>
-      Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '—');
+      Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '—' && value !== '-');
     const firstUsefulMetric = (...values: Array<string | undefined>) =>
       values.find((value) => isUsefulMetric(value));
 
@@ -247,11 +247,11 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
       setPortalState({
         chainStats: {
           ...prevStats,
-          tvl: firstUsefulMetric(cachedStats.ecosystemTvl, cachedStats.chainTvl) || prevStats.tvl,
-          chainTvl: firstUsefulMetric(cachedStats.chainTvl) || prevStats.chainTvl,
-          tvlChange: cachedStats.ecosystemTvlChange || cachedStats.chainTvlChange || prevStats.tvlChange,
-          chainTvlChange: cachedStats.chainTvlChange || prevStats.chainTvlChange,
-          fees24h: firstUsefulMetric(cachedStats.fees24h) || prevStats.fees24h,
+          tvl: cachedStats.ecosystemTvl || cachedStats.chainTvl || '-',
+          chainTvl: cachedStats.chainTvl || '-',
+          tvlChange: cachedStats.ecosystemTvlChange || cachedStats.chainTvlChange || '-',
+          chainTvlChange: cachedStats.chainTvlChange || '-',
+          fees24h: cachedStats.fees24h || '-',
         }
       });
     }
@@ -265,34 +265,28 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
 
     const fetchTvl = async () => {
       try {
-        let chainTvl = '';
-        let chainTvlChange = '';
-        let ecosystemTvl = '';
-        let ecosystemTvlChange = '';
-        let fees24h = '';
-        let tvlSuccess = false;
+        let chainTvl = '-';
+        let chainTvlChange = '-';
+        let ecosystemTvl = '-';
+        let ecosystemTvlChange = '-';
+        let fees24h = '-';
 
         // ── Step 1: Try the local/Vercel serverless function ─────────────────────
-        // server.mjs now fetches fees server-side (no CORS issue)
         try {
           const res = await fetch(`${API_BASE}/api/chain-stats`);
-          if (!res.ok) throw new Error(`chain-stats failed: ${res.status}`);
           if (res.ok) {
             const d = await res.json();
-            chainTvl = d.chainTvl || '';
-            chainTvlChange = d.chainTvlChange || '';
-            ecosystemTvl = d.ecosystemTvl || '';
-            ecosystemTvlChange = d.ecosystemTvlChange || '';
-            fees24h = d.fees24h != null ? String(d.fees24h) : '';
-            if (isUsefulMetric(chainTvl) || isUsefulMetric(ecosystemTvl) || isUsefulMetric(fees24h)) {
-              writeCachedData('chain-stats', d);
-            }
-            tvlSuccess = !!(isUsefulMetric(chainTvl) || isUsefulMetric(ecosystemTvl) || isUsefulMetric(fees24h));
+            chainTvl = d.chainTvl || '-';
+            chainTvlChange = d.chainTvlChange || '-';
+            ecosystemTvl = d.ecosystemTvl || '-';
+            ecosystemTvlChange = d.ecosystemTvlChange || '-';
+            fees24h = d.fees24h != null ? String(d.fees24h) : '-';
+            writeCachedData('chain-stats', d);
           }
-        } catch (err) { throw err; }
+        } catch (err) { console.warn(err); }
 
         // ── Step 2: If the API call failed, fetch DeFiLlama directly ────────────
-        if (!tvlSuccess) {
+        if (chainTvl === '-' && fees24h === '-') {
           const [histRes, feesRes] = await Promise.allSettled([
             fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle'),
             fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees'),
@@ -318,18 +312,15 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               chainTvlChange = `${parseFloat(changePct) >= 0 ? '+' : ''}${changePct}%`;
               ecosystemTvl = chainTvl;
               ecosystemTvlChange = chainTvlChange;
-              tvlSuccess = true;
             }
           }
 
           if (feesRes.status === 'fulfilled' && feesRes.value.ok) {
             try {
               const fd = await feesRes.value.json();
-              // data.total24h is DeFiLlama's Mantle-chain aggregate
               if (typeof fd?.total24h === 'number' && fd.total24h > 0) {
                 fees24h = formatFee(fd.total24h);
               } else if (Array.isArray(fd?.protocols)) {
-                // Fallback: sum all listed protocols (already Mantle-filtered)
                 const sum = (fd.protocols as any[]).reduce(
                   (acc: number, p: any) =>
                     acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0),
@@ -341,25 +332,20 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           }
         }
 
-        // ── Step 3: Static fallback — always clears 'Loading…' ──────────────────
-        // (Direct browser fetch of DeFiLlama is CORS-blocked; server.mjs handles
-        //  this server-side now. If both fail, show a known snapshot value.)
-        if (!fees24h) {
-          fees24h = '';
-        }
-
-        // ── Commit to store — always write fees24h to clear the 'Loading…' state ─
+        // ── Commit to store ─ write exactly what we got; NEVER write stale prevStats ──
+        // The critical fix: the old `fees24h = firstUsefulMetric(fees24h) || prevStats.fees24h`
+        // caused stale/wrong data to persist whenever the API returned nothing useful.
         const prevStats = usePortalStore.getState().chainStats;
         const nextTvl = firstUsefulMetric(ecosystemTvl, chainTvl);
         const nextChainTvl = firstUsefulMetric(chainTvl);
-        fees24h = firstUsefulMetric(fees24h) || prevStats.fees24h;
+        const nextFees = isUsefulMetric(fees24h) ? fees24h : '-';
         setPortalState({
           chainStats: {
             ...prevStats,
-            ...(nextTvl && { tvl: nextTvl }),
+            tvl: nextTvl ?? prevStats.tvl,
             ...(nextChainTvl && { chainTvl: nextChainTvl }),
-            ...(chainTvlChange && { tvlChange: ecosystemTvlChange || chainTvlChange, chainTvlChange }),
-            fees24h, // always write — even fallback clears 'Loading…'
+            ...(chainTvlChange && chainTvlChange !== '-' && { tvlChange: ecosystemTvlChange || chainTvlChange, chainTvlChange }),
+            fees24h: nextFees,
           }
         });
       } catch (e) {

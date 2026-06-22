@@ -2,9 +2,21 @@ const MANTLE_CHAIN = 'mantle';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map();
 
+// Some protocols track fees under a different (child) slug on DeFiLlama.
+// Key = the defillamaSlug we store in mantleProjects.ts
+// Value = array of alternative slugs to try for fee lookups.
+const SLUG_FEE_ALIASES = {
+  'merchant-moe':    ['merchant-moe-liquidity-book', 'merchant-moe-dex'],
+  'stargate-v1':     ['stargate-v2', 'stargate-v1'],
+  'lendle-pooled-markets': ['lendle-pooled-markets'],
+  'compound-v3':     ['compound-v3'],
+  'ondo-yield-assets': ['ondo-yield-assets'],
+  'agni-finance':    ['agni-finance'],
+};
+
 export function formatUsd(value) {
   const num = Number(value);
-  if (!Number.isFinite(num) || num <= 0) return '$0';
+  if (!Number.isFinite(num) || num <= 0) return '-';
   if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
   if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
   if (num >= 1e3) return `$${(num / 1e3).toFixed(1)}K`;
@@ -39,10 +51,10 @@ async function fetchJson(url, timeoutMs = 10000) {
 }
 
 function isUsefulDisplay(value) {
-  return Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '—');
+  return Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '-' && value !== '—');
 }
 
-function pickMetric(primary, fallback, emptyLabel = '$0') {
+function pickMetric(primary, fallback = '', emptyLabel = '-') {
   if (isUsefulDisplay(primary)) return primary;
   if (isUsefulDisplay(fallback)) return fallback;
   return emptyLabel;
@@ -133,9 +145,9 @@ async function fetchMantleOverviewFee(slug, baseline = {}) {
 export async function fetchProtocolMantleData(slug, baseline = {}) {
   if (!slug) {
     return {
-      tvl: pickMetric('', baseline.baseTvl),
-      mantleTvl: pickMetric('', baseline.baseTvl),
-      fees24h: pickMetric('', baseline.baseFees),
+      tvl: '-',
+      mantleTvl: '-',
+      fees24h: '-',
       dataSource: 'Baseline',
       isStale: true,
       isFallback: true,
@@ -153,26 +165,35 @@ export async function fetchProtocolMantleData(slug, baseline = {}) {
     const globalTvlNum = getGlobalTvlNumber(details);
 
     let feeNum = 0;
-    for (const dataType of ['dailyFees', 'dailyRevenue']) {
-      try {
-        const summary = await fetchJson(
-          `https://api.llama.fi/summary/fees/${encodeURIComponent(slug)}?dataType=${dataType}`,
-          10000
-        );
-        feeNum = extractMantleFeeNumber(summary, details);
-        if (feeNum > 0) break;
-      } catch {
-        // Keep trying the next DeFiLlama summary type.
+    // Build the list of slugs to try for fee lookups:
+    // Use aliased child slugs first (if mapped), then the primary slug.
+    const feeSlugs = SLUG_FEE_ALIASES[slug]
+      ? [...SLUG_FEE_ALIASES[slug], slug]
+      : [slug];
+
+    outer: for (const feeSlug of feeSlugs) {
+      for (const dataType of ['dailyFees', 'dailyRevenue']) {
+        try {
+          const summary = await fetchJson(
+            `https://api.llama.fi/summary/fees/${encodeURIComponent(feeSlug)}?dataType=${dataType}`,
+            10000
+          );
+          feeNum = extractMantleFeeNumber(summary, details);
+          if (feeNum > 0) break outer;
+        } catch {
+          // Keep trying the next DeFiLlama summary type or slug.
+        }
       }
     }
+    // Last resort: scan the Mantle-chain fee overview
     if (feeNum <= 0) {
       feeNum = await fetchMantleOverviewFee(slug, baseline);
     }
 
     return setCached(key, {
-      tvl: pickMetric(formatUsd(globalTvlNum), baseline.baseTvl),
-      mantleTvl: pickMetric(formatUsd(mantleTvlNum), baseline.baseTvl),
-      fees24h: pickMetric(formatUsd(feeNum), baseline.baseFees),
+      tvl: pickMetric(formatUsd(globalTvlNum)),
+      mantleTvl: pickMetric(formatUsd(mantleTvlNum)),
+      fees24h: pickMetric(formatUsd(feeNum)),
       logoUrl: details.logo || `https://icons.llamao.fi/icons/protocols/${slug}.png`,
       dataSource: 'DeFiLlama',
       isStale: false,
@@ -183,9 +204,9 @@ export async function fetchProtocolMantleData(slug, baseline = {}) {
     const stale = getCached(key, { allowStale: true });
     if (stale) return { ...stale, isStale: true, dataSource: `${stale.dataSource} cache` };
     return {
-      tvl: pickMetric('', baseline.baseTvl),
-      mantleTvl: pickMetric('', baseline.baseTvl),
-      fees24h: pickMetric('', baseline.baseFees),
+      tvl: '-',
+      mantleTvl: '-',
+      fees24h: '-',
       dataSource: 'Baseline',
       isStale: true,
       isFallback: true,
@@ -245,7 +266,7 @@ export async function fetchMantleChainStats() {
       chainTvlChange: `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`,
       ecosystemTvl: formatUsd(currentTvlNum || chainTvlNum),
       ecosystemTvlChange: `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`,
-      fees24h: dappFees24h > 0 ? formatUsd(dappFees24h) : '$0',
+      fees24h: dappFees24h > 0 ? formatUsd(dappFees24h) : '-',
       feesLabel: 'Mantle dApp fees',
       dataSource: 'DeFiLlama',
       fetchedAt: Date.now(),
@@ -255,11 +276,11 @@ export async function fetchMantleChainStats() {
     const stale = getCached(key, { allowStale: true });
     if (stale) return { ...stale, isStale: true, dataSource: `${stale.dataSource} cache` };
     return {
-      chainTvl: '$0',
+      chainTvl: '-',
       chainTvlChange: '0.00%',
-      ecosystemTvl: '$0',
+      ecosystemTvl: '-',
       ecosystemTvlChange: '0.00%',
-      fees24h: '$0',
+      fees24h: '-',
       feesLabel: 'Mantle dApp fees',
       dataSource: 'DeFiLlama',
       fetchedAt: Date.now(),

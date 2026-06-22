@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+﻿import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Trash2, ArrowUpRight, Loader, X, Search } from 'lucide-react';
 import { usePortalStore } from '../../store/usePortalStore';
 import { MANTLE_PROJECTS } from '../../lib/mantleProjects';
@@ -167,7 +167,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
       } else {
         // Fallback: intelligent contextual replies
         const query = textToSend.toLowerCase();
-        let fallbackText = "I'm processing your request on Mantle. Let me check the registry for details…\n\n";
+        let fallbackText = "I'm processing your request on Mantle. Let me check the registry for detailsâ€¦\n\n";
 
         // Check if query references any known project by name
         const matchedProject = MANTLE_PROJECTS.find((p) =>
@@ -180,11 +180,10 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
           fallbackText = `Your current account balance on Mantle Mainnet is **${bal} MNT**.\n\nConnected Wallet: \`${userAddress}\`\n\nWould you like me to help you bridge more funds, swap tokens, or explore yield opportunities?`;
         } else if (matchedProject) {
           fallbackText = `Here's what I know about **${matchedProject.name}**:\n\n` +
-            `📌 **Category**: ${matchedProject.category}\n` +
-            `💰 **TVL**: ${matchedProject.tvl}\n` +
-            `📊 **24h Fees**: ${matchedProject.fees24h}\n` +
-            `📝 **About**: ${matchedProject.description}\n\n` +
-            `🔗 **Website**: ${matchedProject.url}\n\n` +
+            `ðŸ“Œ **Category**: ${matchedProject.category}\n` +
+            `ðŸ“ **About**: ${matchedProject.description}\n\n` +
+            `Live TVL and fee metrics are fetched from verified data sources in the dApp dashboard.\n\n` +
+            `ðŸ”— **Website**: ${matchedProject.url}\n\n` +
             `You can launch this dApp directly by clicking "Launch dApp" on the project card. Would you like me to execute any intent on ${matchedProject.name}?`;
         } else if (query.includes('yield') || query.includes('apy') || query.includes('earn')) {
           fallbackText += "Here are the top yield opportunities on Mantle right now:\n\n1. **mETH Protocol (LST)**: Stake ETH for high liquid staking yields (~7.2% APY).\n2. **ONDO Finance (RWA)**: USDY yields around 5.1% APY backed by short-term US Treasuries.\n3. **INIT Capital**: Supply liquidity to earn interest and INIT points.\n\nLet me know which you'd like to explore!";
@@ -195,7 +194,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
           fallbackText = `I'm your Mantle Ecosystem Agent. ${
             wallets[0]?.address
               ? `I'm connected to wallet **${userAddr.slice(0,6)}...${userAddr.slice(-4)}**`
-              : `You haven't connected a wallet yet — click "Connect Wallet" in the header.`
+              : `You haven't connected a wallet yet â€” click "Connect Wallet" in the header.`
           } and ready to execute transactions, fetch live DeFi data, analyze X/Discord sentiment, or bridge tokens.\n\nTry typing a **project name** (e.g. "Merchant Moe" or just type "M") to see matching protocols!`;
         }
 
@@ -219,7 +218,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
     setInput('');
     setShowProjectSearch(false);
     // Immediately ask about the project in the chat
-    handleSend(`Tell me everything about ${project.name} on Mantle — TVL, fees, what I can do there, and any notable features.`);
+    handleSend(`Tell me everything about ${project.name} on Mantle â€” TVL, fees, what I can do there, and any notable features.`);
   };
 
   const handleClose = () => {
@@ -249,7 +248,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
               title="Return to dApp Dashboard"
               className="mr-1.5 px-2.5 py-1 text-[10px] font-black rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-[var(--text-secondary)] hover:bg-[var(--card-hover-bg)] transition flex items-center gap-1 uppercase tracking-wider"
             >
-              <span>← Return</span>
+              <span>â† Return</span>
             </button>
           )}
           <button
@@ -286,7 +285,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
                   {msg.text || (isSending && msg.id === messages[messages.length - 1].id && (
                     <span className="flex items-center gap-1.5 text-slate-500">
                       <Loader size={11} className="animate-spin text-cyan-400" />
-                      Thinking…
+                      Thinkingâ€¦
                     </span>
                   ))}
                 </div>
@@ -319,9 +318,9 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
                             </div>
                             <div className="text-right">
                               <p className="font-extrabold text-emerald-400">
-                                {v.analytics?.apy?.total ? `${(v.analytics.apy.total * 100).toFixed(2)}%` : '—'} APY
+                                {v.analytics?.apy?.total ? `${(v.analytics.apy.total * 100).toFixed(2)}%` : 'â€”'} APY
                               </p>
-                              <p className="text-[9px] text-slate-600">TVL {v.tvl?.usd ? `$${(v.tvl.usd / 1e6).toFixed(1)}M` : '—'}</p>
+                              <p className="text-[9px] text-slate-600">TVL {v.tvl?.usd ? `$${(v.tvl.usd / 1e6).toFixed(1)}M` : 'â€”'}</p>
                             </div>
                           </div>
                         ))}
@@ -330,7 +329,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
                   ) : (
                     <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-cyan-400 font-bold uppercase tracking-wider">🛠️ {msg.toolCall.name}</span>
+                        <span className="text-cyan-400 font-bold uppercase tracking-wider">ðŸ› ï¸ {msg.toolCall.name}</span>
                         {msg.toolCall.status === 'running' ? (
                           <span className="text-amber-400 font-semibold flex items-center gap-1">
                             <Loader size={8} className="animate-spin" /> Executing
@@ -359,7 +358,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
         <div className="px-4 py-3 border-t border-[var(--border-primary)] bg-[var(--bg-primary)] space-y-1.5 animate-in max-h-72 overflow-y-auto scrollbar-hide">
           <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Search size={9} />
-            {filteredProjects.length} project{filteredProjects.length > 1 ? 's' : ''} found — click to ask about or launch
+            {filteredProjects.length} project{filteredProjects.length > 1 ? 's' : ''} found â€” click to ask about or launch
           </p>
           {filteredProjects.map((project) => (
             <div
@@ -378,7 +377,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-extrabold text-[var(--text-primary)] truncate">{project.name}</p>
-                <p className="text-[9px] text-[var(--text-secondary)] uppercase font-bold tracking-wider">{project.category} · {project.tvl}</p>
+                <p className="text-[9px] text-[var(--text-secondary)] uppercase font-bold tracking-wider">{project.category}</p>
               </div>
 
               {/* Action Buttons */}
@@ -445,7 +444,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isSending}
-            placeholder="Type A–Z to browse dApps, or ask anything…"
+            placeholder="Type Aâ€“Z to browse dApps, or ask anythingâ€¦"
             className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] rounded-xl pl-9 pr-10 py-3 text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/20 theme-transition disabled:opacity-50"
           />
           <button
@@ -458,7 +457,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
         </div>
         {input.trim().length === 1 && /^[a-z]/i.test(input.trim()) && (
           <p className="text-[9px] text-[var(--text-secondary)] mt-1.5 pl-1">
-            Showing projects starting with <strong className="text-[var(--accent-color)]">"{input.trim().toUpperCase()}"</strong> — type more to narrow results or press Enter to ask about the top match
+            Showing projects starting with <strong className="text-[var(--accent-color)]">"{input.trim().toUpperCase()}"</strong> â€” type more to narrow results or press Enter to ask about the top match
           </p>
         )}
       </form>
