@@ -183,10 +183,10 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
       const hash = '0x' + Math.random().toString(16).substr(2, 40);
       usePortalStore.getState().updateMessage(pendingId, {
         text:
-          `âœ… **Action successfully executed on ${project.name}!**\n\n` +
+          `✅ **Action successfully executed on ${project.name}!**\n\n` +
           `Your transaction has been processed via ERC-4337 Smart Account with sponsored gas.\n\n` +
-          `ðŸ”— **Transaction Hash**: [${hash.slice(0, 10)}...${hash.slice(-8)}](https://explorer.mantle.xyz/tx/${hash})\n` +
-          `Status: **Confirmed** ðŸŸ¢`,
+          `🔗 **Transaction Hash**: [${hash.slice(0, 10)}...${hash.slice(-8)}](https://explorer.mantle.xyz/tx/${hash})\n` +
+          `Status: **Confirmed** 🟢`,
       });
       setIntentInput('');
       setIsExecuting(false);
@@ -342,8 +342,8 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 {[
                   { label: t.tvl, value: protocolData.mantleTvl || protocolData.tvl || '-', desc: 'Total Value Locked', color: 'text-emerald-400' },
                   { label: '24h Fees', value: protocolData.fees24h || '-', desc: 'Protocol Revenue', color: 'text-cyan-400' },
-                  { label: 'Platform Status', value: 'Active ðŸŸ¢', desc: (project as any).auditor ? `Audited by ${(project as any).auditor}` : 'Security Reviewed', color: 'text-blue-400' },
-                  { label: 'Gas Status', value: 'Sponsored âš¡', desc: 'Account Abstraction', color: 'text-[#00e6b4]' },
+                  { label: 'Platform Status', value: 'Active 🟢', desc: (project as any).auditor ? `Audited by ${(project as any).auditor}` : 'Security Reviewed', color: 'text-blue-400' },
+                  { label: 'Gas Status', value: 'Sponsored ⚡', desc: 'Account Abstraction', color: 'text-[#00e6b4]' },
                 ].map((s, i) => (
                   <div key={i} className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 space-y-1 hover:border-slate-700 transition">
                     <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">{s.label}</p>
@@ -467,7 +467,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                         {/* DEFAULT / OTHER */}
                         {project.category !== 'dex' && project.category !== 'lending' && project.category !== 'lst' && project.category !== 'yield' && (
                           <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-850 text-xs text-slate-400 text-center py-6 leading-relaxed">
-                            ðŸ’¡ Use our **AI Copilot intent bar** at the bottom to build and execute transactions directly on {project.name}!
+                            💡 Use our **AI Copilot intent bar** at the bottom to build and execute transactions directly on {project.name}!
                           </div>
                         )}
 
