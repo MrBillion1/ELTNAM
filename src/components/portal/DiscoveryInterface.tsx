@@ -183,10 +183,14 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [showBridgeModal, setShowBridgeModal] = useState(false);
 
-  // --- Scroll Progress and Anchors ---
+  // --- Scroll Progress and Custom Scrollbar Dragging ---
   const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const [scrollPercent, setScrollPercent] = useState(0);
-  const [activeAnchor, setActiveAnchor] = useState('hero');
+
+  const isDraggingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startScrollTopRef = useRef(0);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -196,55 +200,99 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
       if (totalScroll > 0) {
         setScrollPercent((scrollTop / totalScroll) * 100);
       }
-
-      // Determine active section based on scroll position
-      const statsEl = document.getElementById('portal-stats');
-      const exploreEl = document.getElementById('portal-explore');
-      const projectsEl = document.getElementById('portal-projects');
-
-      const containerTop = containerRef.current.getBoundingClientRect().top;
-
-      if (projectsEl && (projectsEl.getBoundingClientRect().top - containerTop) < 150) {
-        setActiveAnchor('projects');
-      } else if (exploreEl && (exploreEl.getBoundingClientRect().top - containerTop) < 150) {
-        setActiveAnchor('explore');
-      } else if (statsEl && (statsEl.getBoundingClientRect().top - containerTop) < 150) {
-        setActiveAnchor('stats');
-      } else {
-        setActiveAnchor('hero');
-      }
     };
 
     const container = containerRef.current;
     if (container) {
       container.addEventListener('scroll', handleScroll, { passive: true });
-      // Run once initially
       handleScroll();
     }
     return () => container?.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (el && containerRef.current) {
-      const containerTop = containerRef.current.getBoundingClientRect().top;
-      const elTop = el.getBoundingClientRect().top;
-      const targetScroll = containerRef.current.scrollTop + (elTop - containerTop) - 20;
-      containerRef.current.scrollTo({
-        top: targetScroll,
-        behavior: 'smooth'
-      });
+  const handleThumbMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingRef.current = true;
+    startYRef.current = e.clientY;
+    startScrollTopRef.current = containerRef.current.scrollTop;
+
+    document.addEventListener('mousemove', handleThumbMouseMove);
+    document.addEventListener('mouseup', handleThumbMouseUp);
+  };
+
+  const handleThumbMouseMove = (e: MouseEvent) => {
+    if (!isDraggingRef.current || !containerRef.current || !trackRef.current) return;
+    const deltaY = e.clientY - startYRef.current;
+    const { scrollHeight, clientHeight } = containerRef.current;
+    const trackHeight = trackRef.current.clientHeight;
+    const maxScroll = scrollHeight - clientHeight;
+    const thumbHeight = 60;
+    const maxThumbMove = trackHeight - thumbHeight;
+
+    if (maxThumbMove > 0 && maxScroll > 0) {
+      const pctMoved = deltaY / maxThumbMove;
+      const scrollTarget = startScrollTopRef.current + (pctMoved * maxScroll);
+      containerRef.current.scrollTop = Math.max(0, Math.min(scrollTarget, maxScroll));
     }
   };
 
-  const handleScrollbarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleThumbMouseUp = () => {
+    isDraggingRef.current = false;
+    document.removeEventListener('mousemove', handleThumbMouseMove);
+    document.removeEventListener('mouseup', handleThumbMouseUp);
+  };
+
+  const handleThumbTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-    const pct = Math.min(Math.max(clickY / rect.height, 0), 1);
+    e.stopPropagation();
+    isDraggingRef.current = true;
+    startYRef.current = e.touches[0].clientY;
+    startScrollTopRef.current = containerRef.current.scrollTop;
+
+    document.addEventListener('touchmove', handleThumbTouchMove, { passive: false });
+    document.addEventListener('touchend', handleThumbTouchEnd);
+  };
+
+  const handleThumbTouchMove = (e: TouchEvent) => {
+    if (!isDraggingRef.current || !containerRef.current || !trackRef.current) return;
+    e.preventDefault();
+    const deltaY = e.touches[0].clientY - startYRef.current;
     const { scrollHeight, clientHeight } = containerRef.current;
+    const trackHeight = trackRef.current.clientHeight;
+    const maxScroll = scrollHeight - clientHeight;
+    const thumbHeight = 60;
+    const maxThumbMove = trackHeight - thumbHeight;
+
+    if (maxThumbMove > 0 && maxScroll > 0) {
+      const pctMoved = deltaY / maxThumbMove;
+      const scrollTarget = startScrollTopRef.current + (pctMoved * maxScroll);
+      containerRef.current.scrollTop = Math.max(0, Math.min(scrollTarget, maxScroll));
+    }
+  };
+
+  const handleThumbTouchEnd = () => {
+    isDraggingRef.current = false;
+    document.removeEventListener('touchmove', handleThumbTouchMove);
+    document.removeEventListener('touchend', handleThumbTouchEnd);
+  };
+
+  const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const clickY = e.clientY - rect.top;
+    const { scrollHeight, clientHeight } = containerRef.current;
+    const maxScroll = scrollHeight - clientHeight;
+    const thumbHeight = 60;
+    const maxThumbMove = rect.height - thumbHeight;
+    if (maxThumbMove <= 0) return;
+
+    const targetThumbTop = clickY - (thumbHeight / 2);
+    const targetPct = targetThumbTop / maxThumbMove;
+
     containerRef.current.scrollTo({
-      top: pct * (scrollHeight - clientHeight),
+      top: Math.max(0, Math.min(targetPct * maxScroll, maxScroll)),
       behavior: 'smooth'
     });
   };
@@ -859,49 +907,28 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         />
       )}
 
-      {/* Premium Side Scroll Navigation Dock */}
-      <div className="fixed right-6 top-[20%] bottom-[20%] w-8 flex flex-col items-center justify-between z-30 pointer-events-none hidden xl:flex">
-        {/* Track Line */}
+      {/* Custom Scrollbar Panel (allowing scrolling from top to bottom) */}
+      <div className="fixed right-6 top-[15%] bottom-[15%] w-4 z-40 flex items-center justify-center pointer-events-none hidden xl:flex">
         <div
-          onClick={handleScrollbarClick}
-          className="w-1 h-full bg-slate-300 dark:bg-slate-800/40 rounded-full relative border border-slate-400/20 dark:border-slate-700/20 backdrop-blur-sm cursor-pointer pointer-events-auto animate-fade-in"
+          ref={trackRef}
+          onClick={handleTrackClick}
+          className="w-3 h-full bg-slate-200/90 dark:bg-slate-800/80 rounded-full border border-slate-300/40 dark:border-slate-700/40 pointer-events-auto select-none shadow-sm cursor-pointer relative backdrop-blur-sm transition hover:bg-slate-300/60 dark:hover:bg-slate-700/60"
         >
-          {/* Active Fill */}
+          {/* Draggable/Interactive Thumb */}
           <div
-            className="absolute top-0 left-0 right-0 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400"
-            style={{ height: `${scrollPercent}%` }}
+            onMouseDown={handleThumbMouseDown}
+            onTouchStart={handleThumbTouchStart}
+            className="absolute left-[2px] w-2 bg-slate-400 dark:bg-slate-500 rounded-full cursor-grab active:cursor-grabbing hover:bg-slate-500 dark:hover:bg-slate-400 transition-colors shadow-md"
+            style={{
+              height: '60px',
+              top: `${(() => {
+                const trackHeight = trackRef.current?.clientHeight || 0;
+                const thumbHeight = 60;
+                const maxThumbMove = Math.max(0, trackHeight - thumbHeight);
+                return (scrollPercent / 100) * maxThumbMove;
+              })()}px`
+            }}
           />
-          {/* Handle */}
-          <div
-            className="absolute left-1/2 w-4 h-4 bg-gradient-to-br from-blue-500 to-cyan-400 border-2 border-white dark:border-slate-950 rounded-full shadow-[0_0_12px_rgba(6,182,212,0.6)] transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
-            style={{ top: `${scrollPercent}%` }}
-          />
-        </div>
-
-        {/* Floating Anchor Anchors/Dots with tooltips */}
-        <div className="absolute right-6 top-0 bottom-0 flex flex-col justify-around py-4">
-          {[
-            { id: 'portal-hero', label: 'Home', key: 'hero', icon: '🏠' },
-            { id: 'portal-stats', label: 'Ecosystem Stats', key: 'stats', icon: '📊' },
-            { id: 'portal-explore', label: 'Filter & Search', key: 'explore', icon: '🔍' },
-            { id: 'portal-projects', label: 'dApp Registry', key: 'projects', icon: '⚡' },
-          ].map((sec) => (
-            <div key={sec.key} className="group relative flex items-center justify-end">
-              <span className="absolute right-8 px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[10px] font-bold text-white uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl backdrop-blur-md">
-                {sec.label}
-              </span>
-              <button
-                onClick={() => scrollToSection(sec.id)}
-                className={`w-7 h-7 rounded-xl border flex items-center justify-center text-xs transition duration-300 pointer-events-auto shadow-md ${
-                  activeAnchor === sec.key
-                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 border-cyan-400/40 text-white scale-110 shadow-blue-500/20'
-                    : 'bg-white/80 dark:bg-slate-900/80 hover:bg-white dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {sec.icon}
-              </button>
-            </div>
-          ))}
         </div>
       </div>
     </div>
