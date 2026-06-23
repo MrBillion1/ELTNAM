@@ -464,8 +464,36 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
             handleSend(input);
           }
         }}
-        className="p-5 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]"
+        className="p-5 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)] space-y-3"
       >
+        {/* Quick Intent Chips */}
+        <div className="flex flex-wrap gap-1.5 pb-1">
+          <button
+            type="button"
+            onClick={() => handleSend('Show me the best yield opportunities on Mantle sorted by APY')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold transition hover:scale-105 active:scale-95"
+          >
+            <span>🌱</span>
+            <span>Yield Finder</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSend('Help me bridge assets to Mantle')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 hover:border-blue-500/40 text-blue-600 dark:text-blue-400 text-[10px] font-extrabold transition hover:scale-105 active:scale-95"
+          >
+            <span>🌉</span>
+            <span>Bridge Assets</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSend('What is my account balance?')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 hover:border-cyan-500/40 text-cyan-600 dark:text-cyan-400 text-[10px] font-extrabold transition hover:scale-105 active:scale-95"
+          >
+            <span>💰</span>
+            <span>My Balance</span>
+          </button>
+        </div>
+
         <div className="flex gap-2 relative">
           <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" />
           <input

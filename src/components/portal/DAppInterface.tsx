@@ -23,7 +23,12 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   const { connectWallet } = usePrivy();
   const t = TRANSLATIONS[language];
   const { data: protocolData, isLoading: isProtocolLoading } = useProtocolData(project);
-  const displayedTvl = protocolData.mantleTvl || protocolData.tvl || '-';
+  const displayedTvl = (() => {
+    const isUseful = (val?: string) => Boolean(val && val !== '-' && val !== '—' && val !== '–');
+    if (isUseful(protocolData.mantleTvl)) return protocolData.mantleTvl;
+    if (isUseful(protocolData.tvl)) return protocolData.tvl;
+    return '-';
+  })();
   const displayedFees = protocolData.fees24h || '-';
   const hasVerifiedMetric = displayedTvl !== '-' || displayedFees !== '-';
   const greetingKeyRef = useRef('');

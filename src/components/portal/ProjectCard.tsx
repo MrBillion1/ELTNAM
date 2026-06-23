@@ -73,7 +73,14 @@ export function ProjectCard({ project, onSelect, onProceedToDApp }: ProjectCardP
         <div className="grid grid-cols-2 gap-2 py-3 border-t border-[var(--border-primary)]">
           <div>
             <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">TVL ON MANTLE</p>
-            <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">{data.mantleTvl || data.tvl}</p>
+            <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+              {(() => {
+                const isUseful = (val?: string) => Boolean(val && val !== '-' && val !== '—' && val !== '–');
+                if (isUseful(data.mantleTvl)) return data.mantleTvl;
+                if (isUseful(data.tvl)) return data.tvl;
+                return '-';
+              })()}
+            </p>
           </div>
           <div className="text-right">
             <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>

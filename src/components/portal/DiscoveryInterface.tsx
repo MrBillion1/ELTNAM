@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import {
   X,
@@ -79,7 +79,14 @@ function ProjectDetailModal({ project, onClose, onProceedToDApp }: ProjectDetail
         <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-[var(--border-primary)]">
           <div>
             <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">TVL ON MANTLE</p>
-            <p className="text-xl font-black text-emerald-500">{data.mantleTvl || data.tvl}</p>
+            <p className="text-xl font-black text-emerald-500">
+              {(() => {
+                const isUseful = (val?: string) => Boolean(val && val !== '-' && val !== '—' && val !== '–');
+                if (isUseful(data.mantleTvl)) return data.mantleTvl;
+                if (isUseful(data.tvl)) return data.tvl;
+                return '-';
+              })()}
+            </p>
           </div>
           <div>
             <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider">24h Fees</p>
@@ -175,6 +182,72 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [showBridgeModal, setShowBridgeModal] = useState(false);
+
+  // --- Scroll Progress and Anchors ---
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollPercent, setScrollPercent] = useState(0);
+  const [activeAnchor, setActiveAnchor] = useState('hero');
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!containerRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+      const totalScroll = scrollHeight - clientHeight;
+      if (totalScroll > 0) {
+        setScrollPercent((scrollTop / totalScroll) * 100);
+      }
+
+      // Determine active section based on scroll position
+      const statsEl = document.getElementById('portal-stats');
+      const exploreEl = document.getElementById('portal-explore');
+      const projectsEl = document.getElementById('portal-projects');
+
+      const containerTop = containerRef.current.getBoundingClientRect().top;
+
+      if (projectsEl && (projectsEl.getBoundingClientRect().top - containerTop) < 150) {
+        setActiveAnchor('projects');
+      } else if (exploreEl && (exploreEl.getBoundingClientRect().top - containerTop) < 150) {
+        setActiveAnchor('explore');
+      } else if (statsEl && (statsEl.getBoundingClientRect().top - containerTop) < 150) {
+        setActiveAnchor('stats');
+      } else {
+        setActiveAnchor('hero');
+      }
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll, { passive: true });
+      // Run once initially
+      handleScroll();
+    }
+    return () => container?.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el && containerRef.current) {
+      const containerTop = containerRef.current.getBoundingClientRect().top;
+      const elTop = el.getBoundingClientRect().top;
+      const targetScroll = containerRef.current.scrollTop + (elTop - containerTop) - 20;
+      containerRef.current.scrollTo({
+        top: targetScroll,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const handleScrollbarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickY = e.clientY - rect.top;
+    const pct = Math.min(Math.max(clickY / rect.height, 0), 1);
+    const { scrollHeight, clientHeight } = containerRef.current;
+    containerRef.current.scrollTo({
+      top: pct * (scrollHeight - clientHeight),
+      behavior: 'smooth'
+    });
+  };
 
   // --- Filtered projects ---
   const filteredProjects = useMemo(() => {
@@ -415,7 +488,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     <div className="flex h-screen overflow-hidden bg-[var(--bg-gradient)] text-[var(--text-primary)] relative animate-in font-sans theme-transition">
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto flex flex-col scrollbar-hide">
+      <div ref={containerRef} className="flex-1 overflow-y-auto flex flex-col scrollbar-hide relative">
 
         {/* ── Navigation Header ── */}
         <header className="px-4 sm:px-6 py-3.5 border-b border-[var(--border-primary)] flex items-center justify-between sticky top-0 bg-[var(--header-bg)] backdrop-blur-xl z-40 theme-transition gap-3">
@@ -474,19 +547,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
               )}
             </div>
 
-            {/* Yield Finder */}
-            <button
-              onClick={() =>
-                setPortalState({
-                  isChatOpen: true,
-                  chatInputQueue: 'Show me the best yield opportunities on Mantle sorted by APY',
-                })
-              }
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-md bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 hover:bg-emerald-500/20 text-emerald-400 theme-transition"
-            >
-              <span className="text-xs">🌱</span>
-              <span className="hidden sm:inline">Yield Finder</span>
-            </button>
+            {/* Yield Finder (Hidden from header, moved to intents) */}
 
             {/* Ask AI */}
             <button
@@ -631,7 +692,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         </header>
 
         {/* ── Brand Banner ── */}
-        <div className="p-4 md:p-6 animate-in">
+        <div id="portal-hero" className="p-4 md:p-6 animate-in">
           <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[#b6fdf0] to-[#e4fffa] dark:from-[#04241d] dark:to-[#083a2f] border border-[#00e6b4]/20 p-5 md:p-8 flex flex-col xl:flex-row items-center justify-between gap-6 shadow-xl shadow-[#00e6b4]/5">
             {/* Decorative circles */}
             <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20">
@@ -653,7 +714,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
             </div>
 
             {/* Live stats */}
-            <div className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-4 gap-2.5 min-w-[280px] xl:max-w-2xl">
+            <div id="portal-stats" className="relative w-full xl:w-auto grid grid-cols-2 sm:grid-cols-4 gap-2.5 min-w-[280px] xl:max-w-2xl">
               {[
                 { label: 'Mantle DeFi TVL', value: chainStats.chainTvl, desc: chainStats.chainTvlChange, color: 'text-cyan-600 dark:text-cyan-400' },
                 { label: t.latestBlock, value: chainStats.blockNumber, desc: 'Mantle Mainnet', color: 'text-blue-600 dark:text-blue-400' },
@@ -671,7 +732,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         </div>
 
         {/* ── Explore Section Header — Search + Category bar ── */}
-        <div className="px-4 md:px-6 pt-2 pb-0">
+        <div id="portal-explore" className="px-4 md:px-6 pt-2 pb-0">
           <div className="flex items-center justify-between gap-4 mb-4">
             {/* "Explore" label + Search */}
             <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -687,15 +748,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
                 />
               </div>
             </div>
-            {/* Bridge CTA */}
-            <button
-              onClick={() => setShowBridgeModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-extrabold shadow-lg shadow-blue-500/20 transition hover:scale-[1.02] active:scale-[0.98] flex-shrink-0"
-            >
-              <Layers size={13} />
-              <span className="hidden sm:inline">Bridge to Mantle</span>
-              <span className="sm:hidden">Bridge</span>
-            </button>
+            {/* Bridge CTA (Hidden from UI, moved to AI intents) */}
           </div>
 
           {/* Category pills */}
@@ -706,7 +759,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         </div>
 
         {/* ── Project Grid ── */}
-        <div className="flex-1 p-4 md:p-6 pt-4">
+        <div id="portal-projects" className="flex-1 p-4 md:p-6 pt-4">
           {paginatedProjects.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {paginatedProjects.map((proj) => (
@@ -805,6 +858,52 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           onProceedToDApp={onProceedToDApp}
         />
       )}
+
+      {/* Premium Side Scroll Navigation Dock */}
+      <div className="fixed right-6 top-[20%] bottom-[20%] w-8 flex flex-col items-center justify-between z-30 pointer-events-none hidden xl:flex">
+        {/* Track Line */}
+        <div
+          onClick={handleScrollbarClick}
+          className="w-1 h-full bg-slate-300 dark:bg-slate-800/40 rounded-full relative border border-slate-400/20 dark:border-slate-700/20 backdrop-blur-sm cursor-pointer pointer-events-auto animate-fade-in"
+        >
+          {/* Active Fill */}
+          <div
+            className="absolute top-0 left-0 right-0 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400"
+            style={{ height: `${scrollPercent}%` }}
+          />
+          {/* Handle */}
+          <div
+            className="absolute left-1/2 w-4 h-4 bg-gradient-to-br from-blue-500 to-cyan-400 border-2 border-white dark:border-slate-950 rounded-full shadow-[0_0_12px_rgba(6,182,212,0.6)] transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+            style={{ top: `${scrollPercent}%` }}
+          />
+        </div>
+
+        {/* Floating Anchor Anchors/Dots with tooltips */}
+        <div className="absolute right-6 top-0 bottom-0 flex flex-col justify-around py-4">
+          {[
+            { id: 'portal-hero', label: 'Home', key: 'hero', icon: '🏠' },
+            { id: 'portal-stats', label: 'Ecosystem Stats', key: 'stats', icon: '📊' },
+            { id: 'portal-explore', label: 'Filter & Search', key: 'explore', icon: '🔍' },
+            { id: 'portal-projects', label: 'dApp Registry', key: 'projects', icon: '⚡' },
+          ].map((sec) => (
+            <div key={sec.key} className="group relative flex items-center justify-end">
+              <span className="absolute right-8 px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[10px] font-bold text-white uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl backdrop-blur-md">
+                {sec.label}
+              </span>
+              <button
+                onClick={() => scrollToSection(sec.id)}
+                className={`w-7 h-7 rounded-xl border flex items-center justify-center text-xs transition duration-300 pointer-events-auto shadow-md ${
+                  activeAnchor === sec.key
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 border-cyan-400/40 text-white scale-110 shadow-blue-500/20'
+                    : 'bg-white/80 dark:bg-slate-900/80 hover:bg-white dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {sec.icon}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
