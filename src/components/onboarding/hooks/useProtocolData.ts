@@ -111,9 +111,9 @@ export function useProtocolData(project: Project) {
 
   return {
     data: data || {
-      tvl:        '-',
-      mantleTvl:  '-',
-      fees24h:    '-',
+      tvl:        isUsefulMetric(project.tvl) ? project.tvl : '-',
+      mantleTvl:  isUsefulMetric(project.tvl) ? project.tvl : '-',
+      fees24h:    isUsefulMetric(project.fees24h) ? project.fees24h : '-',
       dataSource: 'Baseline',
       isStale:    true,
       fetchedAt:  Date.now(),
