@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Trash2, ArrowUpRight, Loader, X, Search } from 'lucide-react';
 import { usePortalStore } from '../../store/usePortalStore';
 import { MANTLE_PROJECTS } from '../../lib/mantleProjects';
@@ -167,7 +167,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
       } else {
         // Fallback: intelligent contextual replies
         const query = textToSend.toLowerCase();
-        let fallbackText = "I'm processing your request on Mantle. Let me check the registry for detailsâ€¦\n\n";
+        let fallbackText = "I'm processing your request on Mantle. Let me check the registry for details…\n\n";
 
         // Check if query references any known project by name
         const matchedProject = MANTLE_PROJECTS.find((p) =>
@@ -180,21 +180,21 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
           fallbackText = `Your current account balance on Mantle Mainnet is **${bal} MNT**.\n\nConnected Wallet: \`${userAddress}\`\n\nWould you like me to help you bridge more funds, swap tokens, or explore yield opportunities?`;
         } else if (matchedProject) {
           fallbackText = `Here's what I know about **${matchedProject.name}**:\n\n` +
-            `ðŸ“Œ **Category**: ${matchedProject.category}\n` +
-            `ðŸ“ **About**: ${matchedProject.description}\n\n` +
+            `📍 **Category**: ${matchedProject.category}\n` +
+            `📝 **About**: ${matchedProject.description}\n\n` +
             `Live TVL and fee metrics are fetched from verified data sources in the dApp dashboard.\n\n` +
-            `ðŸ”— **Website**: ${matchedProject.url}\n\n` +
+            `🔗 **Website**: ${matchedProject.url}\n\n` +
             `You can launch this dApp directly by clicking "Launch dApp" on the project card. Would you like me to execute any intent on ${matchedProject.name}?`;
         } else if (query.includes('yield') || query.includes('apy') || query.includes('earn')) {
           fallbackText += "Here are the top yield opportunities on Mantle right now:\n\n1. **mETH Protocol (LST)**: Stake ETH for high liquid staking yields (~7.2% APY).\n2. **ONDO Finance (RWA)**: USDY yields around 5.1% APY backed by short-term US Treasuries.\n3. **INIT Capital**: Supply liquidity to earn interest and INIT points.\n\nLet me know which you'd like to explore!";
-        } else if (query.includes('bridge') || query.includes('solana') || query.includes('arbitrum')) {
-          fallbackText += "I can help you bridge assets to Mantle using our integrated LayerZero OFT bridge! You can transfer ETH, USDC, or native MNT from Arbitrum, Solana, or Base directly. Tell me the amount and source chain, and I'll generate the quote.";
+        } else if (query.includes('bridge') || query.includes('solana') || query.includes('arbitrum') || query.includes('base') || query.includes('ethereum')) {
+          fallbackText += "I can help you bridge assets to Mantle using our integrated LI.FI + LayerZero dual-bridge engine! \n\n⚡ **Stablecoins (USDC/USDT)** → LI.FI Intents (5–15s, zero slippage)\n🔥 **mETH, MNT, USDY** → LayerZero OFT (burn-mint, 30–60s)\n🔀 **Everything else** → LI.FI aggregated route\n\nTell me the amount and source chain, and I'll generate the optimal route quote!";
         } else {
           const userAddr = wallets[0]?.address || 'Not connected';
           fallbackText = `I'm your Mantle Ecosystem Agent. ${
             wallets[0]?.address
               ? `I'm connected to wallet **${userAddr.slice(0,6)}...${userAddr.slice(-4)}**`
-              : `You haven't connected a wallet yet â€” click "Connect Wallet" in the header.`
+              : `You haven't connected a wallet yet — click "Connect Wallet" in the header.`
           } and ready to execute transactions, fetch live DeFi data, analyze X/Discord sentiment, or bridge tokens.\n\nTry typing a **project name** (e.g. "Merchant Moe" or just type "M") to see matching protocols!`;
         }
 
@@ -218,7 +218,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
     setInput('');
     setShowProjectSearch(false);
     // Immediately ask about the project in the chat
-    handleSend(`Tell me everything about ${project.name} on Mantle â€” TVL, fees, what I can do there, and any notable features.`);
+    handleSend(`Tell me everything about ${project.name} on Mantle — TVL, fees, what I can do there, and any notable features.`);
   };
 
   const handleClose = () => {
@@ -285,7 +285,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
                   {msg.text || (isSending && msg.id === messages[messages.length - 1].id && (
                     <span className="flex items-center gap-1.5 text-slate-500">
                       <Loader size={11} className="animate-spin text-cyan-400" />
-                      Thinkingâ€¦
+                      Thinking…
                     </span>
                   ))}
                 </div>
@@ -308,35 +308,65 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
                     </div>
                   ) : msg.toolCall.name === 'lifi_get_earn_vaults' && msg.toolCall.status === 'done' ? (
                     <div className="mt-3 space-y-2 p-3 bg-slate-900 border border-slate-800 rounded-xl">
-                      <p className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wider">Top Yield Pools on Mantle</p>
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      <p className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wider">🌱 Top Yield Pools on Mantle</p>
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto scrollbar-hide">
                         {msg.toolCall.result?.vaults?.map((v: any) => (
-                          <div key={v.address || v.slug} className="p-2.5 bg-slate-950 border border-slate-850 rounded-lg flex justify-between items-center text-[10px]">
+                          <div key={v.address || v.slug} className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center text-[10px] hover:border-emerald-500/30 transition">
                             <div>
                               <p className="font-bold text-white">{v.protocol?.name || 'Unknown Protocol'}</p>
-                              <p className="text-[9px] text-slate-500">{v.underlyingTokens?.map((t: any) => t.symbol).join(' + ') || 'Tokens'}</p>
+                              <p className="text-[9px] text-slate-500 mt-0.5">{v.underlyingTokens?.map((t: any) => t.symbol).join(' + ') || 'Tokens'}</p>
                             </div>
                             <div className="text-right">
                               <p className="font-extrabold text-emerald-400">
-                                {v.analytics?.apy?.total ? `${(v.analytics.apy.total * 100).toFixed(2)}%` : 'â€”'} APY
+                                {v.analytics?.apy?.total ? `${(v.analytics.apy.total * 100).toFixed(2)}%` : '—'} APY
                               </p>
-                              <p className="text-[9px] text-slate-600">TVL {v.tvl?.usd ? `$${(v.tvl.usd / 1e6).toFixed(1)}M` : 'â€”'}</p>
+                              <p className="text-[9px] text-slate-500">TVL {v.tvl?.usd ? `$${(v.tvl.usd / 1e6).toFixed(1)}M` : '—'}</p>
                             </div>
                           </div>
                         ))}
                       </div>
+                      <p className="text-[8px] text-slate-600 text-right">Powered by LI.FI Earn</p>
+                    </div>
+                  ) : msg.toolCall.name === 'lifi_compose_deposit' && msg.toolCall.status === 'done' ? (
+                    <div className="mt-3 p-3 bg-slate-900 border border-emerald-500/20 rounded-xl space-y-2">
+                      <p className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wider">⚡ Cross-Chain Deposit Ready</p>
+                      <p className="text-[9px] text-slate-400">Vault: <span className="font-mono text-slate-300">{(msg.toolCall.result?.vaultAddress || '').slice(0, 14)}…</span></p>
+                      <div className="space-y-1.5 mt-1">
+                        {msg.toolCall.result?.composerSteps?.map((step: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2 text-[9px]">
+                            <div className="w-4 h-4 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold flex-shrink-0">{i + 1}</div>
+                            <span className="text-slate-300">{step.name}</span>
+                            <span className="ml-auto text-emerald-500 font-semibold capitalize">{step.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : msg.toolCall.name === 'get_protocol_data' && msg.toolCall.status === 'done' ? (
+                    <div className="mt-3 p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                      <p className="text-[10px] text-cyan-400 font-extrabold uppercase tracking-wider">📊 Protocol Data</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([['TVL on Mantle', msg.toolCall.result?.mantleTvl || msg.toolCall.result?.tvl], ['24h Fees', msg.toolCall.result?.fees24h]] as [string, string | undefined][]).map(([label, val]) => (
+                          <div key={label} className="p-2 bg-slate-950 rounded-lg">
+                            <p className="text-[8px] text-slate-500 font-bold uppercase">{label}</p>
+                            <p className="text-xs font-extrabold text-emerald-400">{val || '—'}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {msg.toolCall.result?.dataSource && (
+                        <p className="text-[8px] text-slate-600">Source: {msg.toolCall.result.dataSource}</p>
+                      )}
+                    </div>
+                  ) : msg.toolCall.status === 'running' ? (
+                    <div className="mt-3 p-3 bg-slate-950/60 border border-amber-500/20 rounded-xl flex items-center gap-2 text-[10px]">
+                      <Loader size={11} className="animate-spin text-amber-400 flex-shrink-0" />
+                      <span className="text-amber-300 font-bold">{msg.toolCall.name.replace(/_/g, ' ')}</span>
+                      <span className="text-slate-500 ml-auto">Executing…</span>
                     </div>
                   ) : (
                     <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-cyan-400 font-bold uppercase tracking-wider">ðŸ› ï¸ {msg.toolCall.name}</span>
-                        {msg.toolCall.status === 'running' ? (
-                          <span className="text-amber-400 font-semibold flex items-center gap-1">
-                            <Loader size={8} className="animate-spin" /> Executing
-                          </span>
-                        ) : (
-                          <span className="text-emerald-400 font-semibold">Done</span>
-                        )}
+                        <span className="text-cyan-400 font-bold uppercase tracking-wider">🛠 {msg.toolCall.name.replace(/_/g, ' ')}</span>
+                        <span className="text-emerald-400 font-semibold">Done</span>
                       </div>
                       {msg.toolCall.input && (
                         <pre className="text-[9px] font-mono bg-slate-900 p-2 rounded text-slate-400 overflow-x-auto">
@@ -358,7 +388,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
         <div className="px-4 py-3 border-t border-[var(--border-primary)] bg-[var(--bg-primary)] space-y-1.5 animate-in max-h-72 overflow-y-auto scrollbar-hide">
           <p className="text-[9px] text-[var(--text-secondary)] font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Search size={9} />
-            {filteredProjects.length} project{filteredProjects.length > 1 ? 's' : ''} found â€” click to ask about or launch
+            {filteredProjects.length} project{filteredProjects.length > 1 ? 's' : ''} found — click to ask about or launch
           </p>
           {filteredProjects.map((project) => (
             <div
@@ -444,7 +474,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isSending}
-            placeholder="Type Aâ€“Z to browse dApps, or ask anythingâ€¦"
+            placeholder="Type A–Z to browse dApps, or ask anything…"
             className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--border-hover)] rounded-xl pl-9 pr-10 py-3 text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/20 theme-transition disabled:opacity-50"
           />
           <button
@@ -457,7 +487,7 @@ export function AgentSidebar({ onLaunchDApp }: AgentSidebarProps = {}) {
         </div>
         {input.trim().length === 1 && /^[a-z]/i.test(input.trim()) && (
           <p className="text-[9px] text-[var(--text-secondary)] mt-1.5 pl-1">
-            Showing projects starting with <strong className="text-[var(--accent-color)]">"{input.trim().toUpperCase()}"</strong> â€” type more to narrow results or press Enter to ask about the top match
+            Showing projects starting with <strong className="text-[var(--accent-color)]">“{input.trim().toUpperCase()}”</strong> — type more to narrow results or press Enter to ask about the top match
           </p>
         )}
       </form>

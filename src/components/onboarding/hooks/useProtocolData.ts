@@ -21,15 +21,33 @@ const displayMetric = (value?: string) => (isUsefulMetric(value) ? value : '-');
 const hasUsefulMetrics = (data?: ProtocolData | null) =>
   Boolean(data && (isUsefulMetric(data.mantleTvl) || isUsefulMetric(data.tvl) || isUsefulMetric(data.fees24h)));
 
-const mergeProtocolData = (incoming: ProtocolData, cached: ProtocolData | null): ProtocolData => {
+const mergeProtocolData = (
+  incoming: ProtocolData,
+  cached: ProtocolData | null,
+  projectBase: { tvl: string; fees24h: string }
+): ProtocolData => {
   const preserveCached = incoming.isFallback || incoming.dataSource === 'Baseline';
   const source = preserveCached && cached ? cached : incoming;
 
   return {
     ...incoming,
-    tvl: isUsefulMetric(incoming.tvl) ? incoming.tvl : displayMetric(cached?.tvl),
-    mantleTvl: isUsefulMetric(incoming.mantleTvl) ? incoming.mantleTvl : displayMetric(cached?.mantleTvl || cached?.tvl),
-    fees24h: isUsefulMetric(incoming.fees24h) ? incoming.fees24h : displayMetric(cached?.fees24h),
+    tvl: isUsefulMetric(incoming.tvl)
+      ? incoming.tvl
+      : isUsefulMetric(cached?.tvl)
+      ? cached.tvl
+      : displayMetric(projectBase.tvl),
+    mantleTvl: isUsefulMetric(incoming.mantleTvl)
+      ? incoming.mantleTvl
+      : isUsefulMetric(cached?.mantleTvl)
+      ? cached.mantleTvl
+      : isUsefulMetric(cached?.tvl)
+      ? cached.tvl
+      : displayMetric(projectBase.tvl),
+    fees24h: isUsefulMetric(incoming.fees24h)
+      ? incoming.fees24h
+      : isUsefulMetric(cached?.fees24h)
+      ? cached.fees24h
+      : displayMetric(projectBase.fees24h),
     logoUrl: incoming.logoUrl || cached?.logoUrl,
     dataSource: source.dataSource,
     isStale: preserveCached ? true : incoming.isStale,
@@ -39,26 +57,26 @@ const mergeProtocolData = (incoming: ProtocolData, cached: ProtocolData | null):
 
 // SWR fetcher that targets Vite proxy route
 const fetcher = async (url: string) => {
+  const urlObj = new URL(url, window.location.origin);
+  const baseTvl = urlObj.searchParams.get('baseTvl') || '-';
+  const baseFees = urlObj.searchParams.get('baseFees') || '-';
+  const projectBase = { tvl: baseTvl, fees24h: baseFees };
+
   const cached = readCachedData<ProtocolData>(url);
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch protocol data');
   const data = await res.json() as ProtocolData;
-  const merged = mergeProtocolData(data, cached);
+  const merged = mergeProtocolData(data, cached, projectBase);
 
   if (!data.isFallback && data.dataSource !== 'Baseline' && hasUsefulMetrics(merged)) {
     writeCachedData<ProtocolData>(url, merged);
   }
 
-  return hasUsefulMetrics(merged) ? merged : {
-    ...merged,
-    tvl: '-',
-    mantleTvl: '-',
-    fees24h: '-',
-  };
+  return merged;
 };
 
 export function useProtocolData(project: Project) {
-  // Build the query string â€” pass baseline values so the API can fall back to them
+  // Build the query string — pass baseline values so the API can fall back to them
   // `name` lets the Mantle-overview lookup match by display name when slug differs
   const params = new URLSearchParams({
     slug:     project.defillamaSlug || '',
@@ -81,9 +99,9 @@ export function useProtocolData(project: Project) {
       refreshInterval:      5 * 60 * 1000,
       dedupingInterval:     60_000,
       fallbackData: cached ?? {
-        tvl:        '-',
-        mantleTvl:  '-',
-        fees24h:    '-',
+        tvl:        isUsefulMetric(project.tvl) ? project.tvl : '-',
+        mantleTvl:  isUsefulMetric(project.tvl) ? project.tvl : '-',
+        fees24h:    isUsefulMetric(project.fees24h) ? project.fees24h : '-',
         dataSource: 'Baseline',
         isStale:    true,
         fetchedAt:  Date.now(),

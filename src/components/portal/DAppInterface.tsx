@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import {
   ArrowLeft, ExternalLink, Cpu, CheckCircle, RefreshCw,
@@ -11,6 +11,7 @@ import { useProtocolData } from '../onboarding/hooks/useProtocolData';
 import { mantlePublicClient } from '../../lib/chains';
 import { TRANSLATIONS } from '../../lib/translations';
 import { ProjectLogo } from '../shared/ProjectLogo';
+import LiFiBridgeRouter from '../../bridge/LiFiBridgeRouter';
 
 interface DAppInterfaceProps {
   project: Project;
@@ -31,9 +32,9 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [hasSubmittedIntent, setHasSubmittedIntent] = useState(false);
 
-  // Workspace Tab: 'portal' (interactive analytics) or 'website' (redirect + modal)
+  // Workspace Tab: 'portal' (interactive analytics), 'website' (redirect + modal) or 'bridge' (LI.FI bridge router)
   // Default to 'website' to show real-time project UI immediately inside the ELTNAM website
-  const [activeTab, setActiveTab] = useState<'portal' | 'website'>('website');
+  const [activeTab, setActiveTab] = useState<'portal' | 'website' | 'bridge'>('website');
   const [showWalletChoice, setShowWalletChoice] = useState(true);
 
   useEffect(() => {
@@ -41,6 +42,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
       setShowWalletChoice(true);
     }
   }, [activeTab]);
+
 
   // Interactive Simulator States
   const [simStep, setSimStep] = useState<'input' | 'processing' | 'done'>('input');
@@ -152,8 +154,8 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
     addMessage({
       type: 'agent',
       text: `${t.copilotGreeting.replace('this dApp', `**${project.name}**`)}\n\n` +
-        `ðŸ“Š **${t.tvl}**: ${displayedTvl} · **24h Fees**: ${displayedFees}\n\n` +
-        `**Quick actions I can do for you:**\n${project.actions.map((a) => `â€¢ ${a}`).join('\n')}`,
+        `📊 **${t.tvl}**: ${displayedTvl} · **24h Fees**: ${displayedFees}\n\n` +
+        `**Quick actions I can do for you:**\n${project.actions.map((a) => `• ${a}`).join('\n')}`,
     });
   }, [addMessage, displayedFees, displayedTvl, hasVerifiedMetric, isProtocolLoading, language, project.actions, project.id, project.name, t]);
 
@@ -169,7 +171,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
     addMessage({ type: 'user', text: finalIntent });
     const pendingId = addMessage({
       type: 'agent',
-      text: `Processing: "${finalIntent}" on ${project.name}â€¦`,
+      text: `Processing: "${finalIntent}" on ${project.name}…`,
     });
 
     setTimeout(() => {
@@ -295,7 +297,20 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
               >
                 {t.liveInterface}
               </button>
+              <button
+                onClick={() => {
+                  setActiveTab('bridge');
+                }}
+                className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wider ${
+                  activeTab === 'bridge'
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Bridge
+              </button>
             </div>
+
 
             <a
               href={project.url}
@@ -464,7 +479,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                     {simStep === 'processing' && (
                       <div className="py-12 flex flex-col items-center justify-center space-y-4">
                         <RefreshCw size={24} className="animate-spin text-cyan-400" />
-                        <p className="text-xs text-slate-400 font-bold">Simulating transaction on Mantle Ledgerâ€¦</p>
+                        <p className="text-xs text-slate-400 font-bold">Simulating transaction on Mantle Ledger…</p>
                       </div>
                     )}
 
@@ -586,8 +601,8 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 
                 {/* Simulated navigation */}
                 <div className="flex items-center gap-1 ml-2 flex-shrink-0 text-slate-500">
-                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">â†</span>
-                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">â†’</span>
+                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">←</span>
+                  <span className="p-1 rounded hover:bg-slate-800 cursor-not-allowed">→</span>
                   <button
                     onClick={() => {
                       const iframe = document.getElementById('dapp-iframe') as HTMLIFrameElement;
@@ -602,7 +617,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
 
                 {/* Address Bar */}
                 <div className="flex-1 max-w-xl mx-auto flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800/80 font-mono text-[10px] text-slate-300">
-                  <span className="text-emerald-500">ðŸ”’</span>
+                  <span className="text-emerald-500">🔒</span>
                   <span className="truncate">{project.url}</span>
                 </div>
 
@@ -699,7 +714,22 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
             </div>
           )}
 
-          {/* â”€â”€ Intent bar overlay (pinned to bottom of iframe area) â”€â”€ */}
+          {/* TAB C: LI.FI Bridge Router */}
+          {activeTab === 'bridge' && (
+            <div className="w-full h-full overflow-y-auto p-6 space-y-6 flex items-center justify-center scrollbar-hide pb-28">
+              <div className="w-full max-w-md bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-xl">
+                <LiFiBridgeRouter
+                  walletAddress={wallets[0]?.address || '0x0000000000000000000000000000000000000000'}
+                  onBridgeComplete={() => {
+                    console.log('[Bridge] Complete callback fired');
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+
+          {/* ——— Intent bar overlay (pinned to bottom of iframe area) ——— */}
           <div className="absolute bottom-0 left-0 right-0 p-4 z-20 pointer-events-none">
             <form
               onSubmit={handleIntentSubmit}
@@ -722,7 +752,7 @@ export function DAppInterface({ project, onBack }: DAppInterfaceProps) {
                 className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 disabled:from-slate-800 disabled:to-slate-900 rounded-xl text-xs font-bold text-white transition hover:scale-105 active:scale-95 disabled:opacity-40 flex items-center gap-1.5 flex-shrink-0"
               >
                 {isExecuting ? (
-                  <><RefreshCw size={11} className="animate-spin" /><span>Processingâ€¦</span></>
+                  <><RefreshCw size={11} className="animate-spin" /><span>Processing…</span></>
                 ) : (
                   <><CheckCircle size={11} /><span>{t.submitToAi}</span></>
                 )}

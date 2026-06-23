@@ -15,8 +15,10 @@ import {
   Wallet,
   ChevronDown,
   Search,
-  Globe
+  Globe,
+  Layers
 } from 'lucide-react';
+import LiFiBridgeRouter from '../../bridge/LiFiBridgeRouter';
 import { MANTLE_PROJECTS } from '../../lib/mantleProjects';
 import type { Project } from '../../lib/mantleProjects';
 import { usePortalStore } from '../../store/usePortalStore';
@@ -172,6 +174,7 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   const [userBalance, setUserBalance] = useState<string>('0.00');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
+  const [showBridgeModal, setShowBridgeModal] = useState(false);
 
   // --- Filtered projects ---
   const filteredProjects = useMemo(() => {
@@ -202,6 +205,8 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
   }, [filteredProjects, currentPage]);
 
   // --- Chain stats (on-chain: block + gas) ---
+  // IMPORTANT: always read latest chainStats from the store directly to avoid
+  // overwriting TVL / fees fetched by the separate DeFiLlama effect below.
   useEffect(() => {
     const fetchOnChainStats = async () => {
       try {
@@ -210,9 +215,12 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           mantlePublicClient.getGasPrice(),
         ]);
         const gasGwei = (Number(gas) / 1e9).toFixed(3) + ' Gwei';
+        // Read the CURRENT store state so we never clobber TVL/fees that were
+        // set by the DeFiLlama effect after this effect was mounted.
+        const currentStats = usePortalStore.getState().chainStats;
         setPortalState({
           chainStats: {
-            ...chainStats,
+            ...currentStats,
             blockNumber: blockNum.toLocaleString(),
             gasPrice: gasGwei,
           }
@@ -226,20 +234,15 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
     return () => clearInterval(interval);
   }, [setPortalState]);
 
-  // --- Real TVL + 24h Fees from /api/chain-stats (DeFiLlama server source) ---
+  // --- Real TVL + 24h Fees from DeFiLlama (direct + server proxy) ---
   useEffect(() => {
-    const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
-    const isUsefulMetric = (value?: string) =>
-      Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '—' && value !== '-');
-    const firstUsefulMetric = (...values: Array<string | undefined>) =>
-      values.find((value) => isUsefulMetric(value));
+    const isUsefulMetric = (value?: string): value is string =>
+      Boolean(value && value !== 'N/A' && value !== '$0' && value !== '$0.00' && value !== '—' && value !== '-' && value !== '…');
 
+    // ── Hydrate from localStorage cache immediately (fast first paint) ─────────
     const cachedStats = readCachedData<{
-      chainTvl?: string;
-      chainTvlChange?: string;
-      ecosystemTvl?: string;
-      ecosystemTvlChange?: string;
-      fees24h?: string;
+      chainTvl?: string; chainTvlChange?: string;
+      ecosystemTvl?: string; ecosystemTvlChange?: string; fees24h?: string;
     }>('chain-stats');
 
     if (cachedStats) {
@@ -247,21 +250,20 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
       setPortalState({
         chainStats: {
           ...prevStats,
-          tvl: cachedStats.ecosystemTvl || cachedStats.chainTvl || '-',
-          chainTvl: cachedStats.chainTvl || '-',
-          tvlChange: cachedStats.ecosystemTvlChange || cachedStats.chainTvlChange || '-',
-          chainTvlChange: cachedStats.chainTvlChange || '-',
-          fees24h: cachedStats.fees24h || '-',
+          tvl:            isUsefulMetric(cachedStats.ecosystemTvl) ? cachedStats.ecosystemTvl! : (isUsefulMetric(cachedStats.chainTvl) ? cachedStats.chainTvl! : prevStats.tvl),
+          chainTvl:       isUsefulMetric(cachedStats.chainTvl) ? cachedStats.chainTvl! : prevStats.chainTvl,
+          tvlChange:      (cachedStats.ecosystemTvlChange && cachedStats.ecosystemTvlChange !== '-') ? cachedStats.ecosystemTvlChange : prevStats.tvlChange,
+          chainTvlChange: (cachedStats.chainTvlChange && cachedStats.chainTvlChange !== '-') ? cachedStats.chainTvlChange : prevStats.chainTvlChange,
+          fees24h:        isUsefulMetric(cachedStats.fees24h) ? cachedStats.fees24h! : prevStats.fees24h,
         }
       });
     }
 
-    const formatFee = (f: number) =>
-      f >= 1e6
-        ? `$${(f / 1e6).toFixed(1)}M`
-        : f >= 1e3
-          ? `$${(f / 1e3).toFixed(1)}K`
-          : `$${Math.round(f).toLocaleString()}`;
+    const formatVal = (f: number) =>
+      f >= 1e9 ? `$${(f / 1e9).toFixed(2)}B`
+      : f >= 1e6 ? `$${(f / 1e6).toFixed(1)}M`
+      : f >= 1e3 ? `$${(f / 1e3).toFixed(1)}K`
+      : `$${Math.round(f).toLocaleString()}`;
 
     const fetchTvl = async () => {
       try {
@@ -271,85 +273,81 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
         let ecosystemTvlChange = '-';
         let fees24h = '-';
 
-        // ── Step 1: Try the local/Vercel serverless function ─────────────────────
+        // ── Step 1: Try server proxy via relative /api path (no CORS issue) ──────
+        // Vite proxies /api/* to localhost:3001 in dev; in prod it hits Vercel.
         try {
-          const res = await fetch(`${API_BASE}/api/chain-stats`);
+          const res = await fetch('/api/chain-stats', { signal: AbortSignal.timeout(5000) });
           if (res.ok) {
             const d = await res.json();
-            chainTvl = d.chainTvl || '-';
-            chainTvlChange = d.chainTvlChange || '-';
-            ecosystemTvl = d.ecosystemTvl || '-';
-            ecosystemTvlChange = d.ecosystemTvlChange || '-';
-            fees24h = d.fees24h != null ? String(d.fees24h) : '-';
-            writeCachedData('chain-stats', d);
+            if (isUsefulMetric(d.chainTvl)) chainTvl = d.chainTvl;
+            if (d.chainTvlChange && d.chainTvlChange !== '-') chainTvlChange = d.chainTvlChange;
+            if (isUsefulMetric(d.ecosystemTvl)) ecosystemTvl = d.ecosystemTvl;
+            if (d.ecosystemTvlChange && d.ecosystemTvlChange !== '-') ecosystemTvlChange = d.ecosystemTvlChange;
+            const rawFees = d.fees24h != null ? String(d.fees24h) : '-';
+            if (isUsefulMetric(rawFees)) fees24h = rawFees;
+            if (isUsefulMetric(chainTvl) || isUsefulMetric(fees24h)) {
+              writeCachedData('chain-stats', d);
+            }
           }
-        } catch (err) { console.warn(err); }
+        } catch { /* server not running — fall through to direct fetch */ }
 
-        // ── Step 2: If the API call failed, fetch DeFiLlama directly ────────────
-        if (chainTvl === '-' && fees24h === '-') {
+        // ── Step 2: Direct DeFiLlama fetch (CORS-safe from browser) ─────────────
+        // Always fetch missing fields directly — DeFiLlama allows browser requests.
+        if (!isUsefulMetric(chainTvl) || !isUsefulMetric(fees24h)) {
           const [histRes, feesRes] = await Promise.allSettled([
-            fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle'),
-            fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees'),
+            fetch('https://api.llama.fi/v2/historicalChainTvl/Mantle', { signal: AbortSignal.timeout(10000) }),
+            fetch('https://api.llama.fi/overview/fees/Mantle?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyFees', { signal: AbortSignal.timeout(10000) }),
           ]);
 
-          if (histRes.status === 'fulfilled' && histRes.value.ok) {
+          if (!isUsefulMetric(chainTvl) && histRes.status === 'fulfilled' && histRes.value.ok) {
             const hist = await histRes.value.json();
             if (Array.isArray(hist) && hist.length >= 2) {
               const latest = hist[hist.length - 1];
-              const prev = hist[hist.length - 2];
-              const latestTvl = latest ? latest.tvl : 0;
-              const prevTvl = prev ? prev.tvl : latestTvl;
-              const changePct = prevTvl ? ((latestTvl - prevTvl) / prevTvl * 100).toFixed(2) : '0.00';
-
-              const formatTvl = (val: number) =>
-                val >= 1e9
-                  ? `$${(val / 1e9).toFixed(2)}B`
-                  : val >= 1e6
-                    ? `$${(val / 1e6).toFixed(1)}M`
-                    : `$${Math.round(val).toLocaleString()}`;
-
-              chainTvl = formatTvl(latestTvl);
-              chainTvlChange = `${parseFloat(changePct) >= 0 ? '+' : ''}${changePct}%`;
-              ecosystemTvl = chainTvl;
+              const prev   = hist[hist.length - 2];
+              const latestTvl = typeof latest?.tvl === 'number' ? latest.tvl : 0;
+              const prevTvl   = typeof prev?.tvl   === 'number' ? prev.tvl   : latestTvl;
+              const pct = prevTvl ? ((latestTvl - prevTvl) / prevTvl * 100) : 0;
+              chainTvl        = formatVal(latestTvl);
+              chainTvlChange  = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+              ecosystemTvl    = chainTvl;
               ecosystemTvlChange = chainTvlChange;
             }
           }
 
-          if (feesRes.status === 'fulfilled' && feesRes.value.ok) {
+          if (!isUsefulMetric(fees24h) && feesRes.status === 'fulfilled' && feesRes.value.ok) {
             try {
               const fd = await feesRes.value.json();
               if (typeof fd?.total24h === 'number' && fd.total24h > 0) {
-                fees24h = formatFee(fd.total24h);
+                fees24h = formatVal(fd.total24h);
               } else if (Array.isArray(fd?.protocols)) {
                 const sum = (fd.protocols as any[]).reduce(
-                  (acc: number, p: any) =>
-                    acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0),
-                  0
+                  (acc: number, p: any) => acc + (typeof p.total24h === 'number' && p.total24h > 0 ? p.total24h : 0), 0
                 );
-                if (sum > 0) fees24h = formatFee(sum);
+                if (sum > 0) fees24h = formatVal(sum);
               }
             } catch { /* ignore */ }
           }
+
+          // Persist freshly fetched values to localStorage cache
+          if (isUsefulMetric(chainTvl) || isUsefulMetric(fees24h)) {
+            writeCachedData('chain-stats', { chainTvl, chainTvlChange, ecosystemTvl, ecosystemTvlChange, fees24h });
+          }
         }
 
-        // ── Commit to store ─ write exactly what we got; NEVER write stale prevStats ──
-        // The critical fix: the old `fees24h = firstUsefulMetric(fees24h) || prevStats.fees24h`
-        // caused stale/wrong data to persist whenever the API returned nothing useful.
+        // ── Commit to store — merge so we never blank a previously-good field ────
         const prevStats = usePortalStore.getState().chainStats;
-        const nextTvl = firstUsefulMetric(ecosystemTvl, chainTvl);
-        const nextChainTvl = firstUsefulMetric(chainTvl);
-        const nextFees = isUsefulMetric(fees24h) ? fees24h : '-';
         setPortalState({
           chainStats: {
             ...prevStats,
-            tvl: nextTvl ?? prevStats.tvl,
-            ...(nextChainTvl && { chainTvl: nextChainTvl }),
-            ...(chainTvlChange && chainTvlChange !== '-' && { tvlChange: ecosystemTvlChange || chainTvlChange, chainTvlChange }),
-            fees24h: nextFees,
+            tvl:            isUsefulMetric(ecosystemTvl) ? ecosystemTvl : (isUsefulMetric(chainTvl) ? chainTvl : prevStats.tvl),
+            chainTvl:       isUsefulMetric(chainTvl) ? chainTvl : prevStats.chainTvl,
+            tvlChange:      (ecosystemTvlChange && ecosystemTvlChange !== '-') ? ecosystemTvlChange : prevStats.tvlChange,
+            chainTvlChange: (chainTvlChange && chainTvlChange !== '-') ? chainTvlChange : prevStats.chainTvlChange,
+            fees24h:        isUsefulMetric(fees24h) ? fees24h : prevStats.fees24h,
           }
         });
       } catch (e) {
-        console.warn('[ELTNAM] Failed to fetch real-time chain stats:', e);
+        console.warn('[ELTNAM] Failed to fetch chain stats:', e);
       }
     };
     fetchTvl();
@@ -475,6 +473,20 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
                 </>
               )}
             </div>
+
+            {/* Yield Finder */}
+            <button
+              onClick={() =>
+                setPortalState({
+                  isChatOpen: true,
+                  chatInputQueue: 'Show me the best yield opportunities on Mantle sorted by APY',
+                })
+              }
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-md bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 hover:bg-emerald-500/20 text-emerald-400 theme-transition"
+            >
+              <span className="text-xs">🌱</span>
+              <span className="hidden sm:inline">Yield Finder</span>
+            </button>
 
             {/* Ask AI */}
             <button
@@ -675,6 +687,15 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
                 />
               </div>
             </div>
+            {/* Bridge CTA */}
+            <button
+              onClick={() => setShowBridgeModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-extrabold shadow-lg shadow-blue-500/20 transition hover:scale-[1.02] active:scale-[0.98] flex-shrink-0"
+            >
+              <Layers size={13} />
+              <span className="hidden sm:inline">Bridge to Mantle</span>
+              <span className="sm:hidden">Bridge</span>
+            </button>
           </div>
 
           {/* Category pills */}
@@ -740,6 +761,30 @@ export function DiscoveryInterface({ onProceedToDApp }: DiscoveryInterfaceProps)
           )}
         </div>
       </div>
+
+      {/* Bridge to Mantle Modal */}
+      {showBridgeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in" onClick={() => setShowBridgeModal(false)}>
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative animate-in slide-in-from-bottom-5 duration-300"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Layers size={16} className="text-blue-400" />
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-sans">Bridge to Mantle</h3>
+              </div>
+              <button onClick={() => setShowBridgeModal(false)} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
+                <X size={16} />
+              </button>
+            </div>
+            <LiFiBridgeRouter
+              walletAddress={evmWallet?.address || '0x0000000000000000000000000000000000000000'}
+              onBridgeComplete={() => setShowBridgeModal(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Backdrop to close AI sidebar */}
       {isChatOpen && (

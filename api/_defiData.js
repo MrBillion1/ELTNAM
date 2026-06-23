@@ -74,6 +74,9 @@ function pickMetric(primary, fallback = '', emptyLabel = '-') {
   return emptyLabel;
 }
 
+// Minimum meaningful Mantle TVL to display — amounts below this are dust/noise.
+const MANTLE_TVL_MIN_USD = 1000;
+
 function getMantleTvlNumber(details) {
   const chainTvls = details?.currentChainTvls || {};
   const mantleKey = Object.keys(chainTvls).find((key) => key.toLowerCase() === MANTLE_CHAIN);
@@ -159,9 +162,9 @@ async function fetchMantleOverviewFee(slug, baseline = {}) {
 export async function fetchProtocolMantleData(slug, baseline = {}) {
   if (!slug) {
     return {
-      tvl: '-',
-      mantleTvl: '-',
-      fees24h: '-',
+      tvl: baseline.baseTvl || '-',
+      mantleTvl: baseline.baseTvl || '-',
+      fees24h: baseline.baseFees || '-',
       dataSource: 'Baseline',
       isStale: true,
       isFallback: true,
@@ -204,10 +207,17 @@ export async function fetchProtocolMantleData(slug, baseline = {}) {
       feeNum = await fetchMantleOverviewFee(slug, baseline);
     }
 
+    // Only display Mantle TVL if it meets the minimum threshold — below this it is dust.
+    const mantleTvlDisplay = mantleTvlNum >= MANTLE_TVL_MIN_USD ? mantleTvlNum : 0;
+
+    const resolvedTvl = formatUsd(globalTvlNum);
+    const resolvedMantleTvl = formatUsd(mantleTvlDisplay);
+    const resolvedFees = feeNum > 0 ? formatUsd(feeNum) : '-';
+
     return setCached(key, {
-      tvl: pickMetric(formatUsd(globalTvlNum)),
-      mantleTvl: pickMetric(formatUsd(mantleTvlNum)),
-      fees24h: pickMetric(formatUsd(feeNum)),
+      tvl: pickMetric(resolvedTvl, baseline.baseTvl),
+      mantleTvl: pickMetric(resolvedMantleTvl, baseline.baseTvl),
+      fees24h: pickMetric(resolvedFees, baseline.baseFees),
       logoUrl: details.logo || `https://icons.llamao.fi/icons/protocols/${slug}.png`,
       dataSource: 'DeFiLlama',
       isStale: false,
@@ -218,9 +228,9 @@ export async function fetchProtocolMantleData(slug, baseline = {}) {
     const stale = getCached(key, { allowStale: true });
     if (stale) return { ...stale, isStale: true, dataSource: `${stale.dataSource} cache` };
     return {
-      tvl: '-',
-      mantleTvl: '-',
-      fees24h: '-',
+      tvl: baseline.baseTvl || '-',
+      mantleTvl: baseline.baseTvl || '-',
+      fees24h: baseline.baseFees || '-',
       dataSource: 'Baseline',
       isStale: true,
       isFallback: true,

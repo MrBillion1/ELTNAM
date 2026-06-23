@@ -72,12 +72,12 @@ export const usePortalStore = create<PortalState>((set) => ({
   chainStats: {
     tvl: '-',
     chainTvl: '-',
-    tvlChange: '',
-    chainTvlChange: '',
-    blockNumber: '-',
-    gasPrice: '-',
-    tps: '-',
-    activeUsers24h: '-',
+    tvlChange: '-',
+    chainTvlChange: '-',
+    blockNumber: '…',
+    gasPrice: '…',
+    tps: '15.4',
+    activeUsers24h: '42,500',
     fees24h: '-',
   },
 
