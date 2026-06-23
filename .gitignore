@@ -9,3 +9,10 @@ node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
+
+# Scratch / debug / audit scripts (not part of the project)
+test_*.js
+test_*.mjs
+test_*.json
+*.audit.js
+*.audit.mjs
